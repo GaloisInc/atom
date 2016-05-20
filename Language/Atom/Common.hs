@@ -1,4 +1,4 @@
--- | 
+-- |
 -- Module: Common
 -- Description: Common functions.
 -- Copyright: (c) 2013 Tom Hawkins & Lee Pike
@@ -80,8 +80,8 @@ debounce :: Name -- ^ Name of the resulting atom
          -> E Bool -- ^ The boolean to debounce
          -> Atom (E Bool) -- ^ Resulting debounced boolean
 debounce name onTime offTime init' a = atom name $ do
-  lst  <- bool "last" init'
-  out   <- bool "out"  init'
+  lst    <- bool "last" init'
+  out    <- bool "out"  init'
   timer' <- timer "timer"
   atom "on" $ do
     cond $ a &&. not_ (value lst)
@@ -138,46 +138,28 @@ hysteresis a b u = do
   min' = min_ a b
   max' = max_ a b
 
--- | A channel is a uni-directional communication link that ensures one read
+-- | A channel is a unidirectional communication link that ensures one read
 -- for every write.
 data Channel a = Channel a (V Bool)
 
--- | Creates a new channel, with a given name and data.
+-- | Creates a new channel, with the given data. A channel may contain only a
+-- single value which may be repeatedly "written" and "read".
 channel :: a -> Atom (Channel a)
 channel a = do
   hasData <- bool "hasData" False
   return $ Channel a hasData
 
--- | Write data to a 'Channel'.  A write will only suceed if the 'Channel' is
+-- | Write data to a 'Channel'.  A write will only succeed if the 'Channel' is
 -- empty.
 writeChannel :: Channel a -> Atom ()
 writeChannel (Channel _ hasData) = do
   cond $ not_ $ value hasData
   hasData <== true
 
--- | Read data from a 'Channel'.  A read will only suceed if the 'Channel' has
+-- | Read data from a 'Channel'.  A read will only succeed if the 'Channel' has
 -- data to be read.
 readChannel :: Channel a -> Atom a
 readChannel (Channel a hasData) = do
   cond $ value hasData
   hasData <== false
   return a
-
-{-
-module Language.Atom.Common.Process
-  ( Process (..)
-  , process
-  ) where
-
-import Language.Atom
-
-data Process
-  = Par [Process]
-  | Seq [Process]
-  | Alt [Process]
-  | Rep Process
-  | Act Action
-
-process :: Name -> Process -> Atom ()
-
--}

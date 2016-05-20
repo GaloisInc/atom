@@ -98,6 +98,7 @@ atom name design = do
 -- | Defines the period of execution of sub-rules as a factor of the base rate
 -- of the system.  Rule period is bound by the closest period assertion.  For
 -- example:
+--
 -- > period 10 $ period 2 a   -- Rules in 'a' have a period of 2, not 10.
 period :: Int -> Atom a -> Atom a
 period n _ | n <= 0 = error "ERROR: Execution period must be greater than 0."
@@ -137,7 +138,7 @@ phase' phType n atom' = do
 -- | Defines the earliest phase within the period at which the rule should
 -- execute; the scheduler attempt to find an optimal phase from 0 <= @n@ <
 -- period (thus, the 'phase' must be at least zero and less than the current
--- 'period'.).
+-- 'period').
 phase :: Int -> Atom a -> Atom a
 phase n a = phase' MinPhase n a
 
@@ -360,7 +361,7 @@ assertImply name a b = do
   assert name $ imply a b
   cover (name ++ "Precondition") a
 
--- | A functional coverage point tracks if an event has occured (true).
+-- | A functional coverage point tracks if an event has occurred (true).
 -- Coverage points are checked at the same time as assertions.
 -- Coverage names should be globally unique.
 cover :: Name -> E Bool -> Atom ()
