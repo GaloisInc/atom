@@ -65,9 +65,9 @@ data Global = Global
 data AtomDB = AtomDB
   { atomId          :: Int
   , atomName        :: Name
-  , atomNames       :: [Name]      -- Names used at this level.
-  , atomEnable      :: Hash        -- Enabling condition.
-  , atomSubs        :: [AtomDB]    -- Sub atoms.
+  , atomNames       :: [Name]      -- ^ Names used at this level.
+  , atomEnable      :: Hash        -- ^ Enabling condition.
+  , atomSubs        :: [AtomDB]    -- ^ Sub atoms.
   , atomPeriod      :: Int
   , atomPhase       :: Phase
   , atomAssigns     :: [(MUV, Hash)]
@@ -190,19 +190,22 @@ reIdRules i (a:b) = case a of
 buildAtom :: UeMap -> Global -> Name -> Atom a -> IO (a, AtomSt)
 buildAtom st g name (Atom f) = do
   let (h,st') = newUE (ubool True) st
-  f (st', (g { gRuleId = gRuleId g + 1 }, AtomDB
-                 { atomId        = gRuleId g
-                 , atomName      = name
-                 , atomNames     = []
-                 , atomEnable    = h
-                 , atomSubs      = []
-                 , atomPeriod    = gPeriod g
-                 , atomPhase     = gPhase  g
-                 , atomAssigns   = []
-                 , atomActions   = []
-                 , atomAsserts   = []
-                 , atomCovers    = []
-                 }))
+  f (st', ( g { gRuleId = gRuleId g + 1 }
+          , AtomDB
+              { atomId        = gRuleId g
+              , atomName      = name
+              , atomNames     = []
+              , atomEnable    = h
+              , atomSubs      = []
+              , atomPeriod    = gPeriod g
+              , atomPhase     = gPhase  g
+              , atomAssigns   = []
+              , atomActions   = []
+              , atomAsserts   = []
+              , atomCovers    = []
+              }
+          )
+    )
 
 type AtomSt = (UeMap, (Global, AtomDB))
 
