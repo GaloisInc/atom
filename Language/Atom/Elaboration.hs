@@ -62,6 +62,17 @@ data Global = Global
   , gPhase   :: Phase
   }
 
+initialGlobal :: Global
+initialGlobal = Global
+  { gRuleId  = 0
+  , gVarId   = 0
+  , gArrayId = 0
+  , gState   = []
+  , gProbes  = []
+  , gPeriod  = 1
+  , gPhase   = MinPhase 0
+  }
+
 data AtomDB = AtomDB
   { atomId          :: Int
   , atomName        :: Name
@@ -254,39 +265,35 @@ elaborate :: UeMap -> Name -> Atom ()
                           , [(Name, Type)])
                        ))
 elaborate st name atom = do
-  (_, (st0, (g, atomDB))) <- buildAtom st Global { gRuleId = 0
-                                                 , gVarId = 0
-                                                 , gArrayId = 0
-                                                 , gState = []
-                                                 , gProbes = []
-                                                 , gPeriod = 1
-                                                 , gPhase  = MinPhase 0
-                                                 }
-                                       name atom
-  let (h,st1) = newUE (ubool True) st0
-      (getRules,st2) = S.runState (elaborateRules h atomDB) st1
-      rules = reIdRules 0 (reverse getRules)
-      coverageNames  = [ name' | Cover  name' _ _ <- rules ]
-      assertionNames = [ name' | Assert name' _ _ <- rules ]
-      probeNames = [ (n, typeOf a st2) | (n, a) <- gProbes g ]
-  if (null rules)
+  (_, (st0, (g, atomDB))) <- buildAtom st initialGlobal name atom
+  let (h, st1)        = newUE (ubool True) st0
+      (getRules, st2) = S.runState (elaborateRules h atomDB) st1
+      rules           = reIdRules 0 (reverse getRules)
+      coverageNames   = [ name' | Cover  name' _ _ <- rules ]
+      assertionNames  = [ name' | Assert name' _ _ <- rules ]
+      probeNames      = [ (n, typeOf a st2) | (n, a) <- gProbes g ]
+  if null rules
     then do
       putStrLn "ERROR: Design contains no rules.  Nothing to do."
       return Nothing
     else do
       mapM_ (checkEnable st2) rules
-      ok <- mapM checkAssignConflicts rules
-      return (if and ok
-                then Just ( st2
-                          , (trimState $ StateHierarchy name
-                              $ gState g, rules, assertionNames
-                                  , coverageNames, probeNames))
-                else Nothing)
+      oks <- mapM checkAssignConflicts rules
+      return $ if and oks
+                 then Just ( st2
+                           , ( trimState . StateHierarchy name $ gState g
+                             , rules
+                             , assertionNames
+                             , coverageNames
+                             , probeNames
+                             )
+                           )
+                 else Nothing
 
 trimState :: StateHierarchy -> StateHierarchy
 trimState a = case a of
   StateHierarchy name items ->
-    StateHierarchy name $ filter f $ map trimState items
+    StateHierarchy name (filter f . map trimState $ items)
   a' -> a'
   where
   f (StateHierarchy _ []) = False
