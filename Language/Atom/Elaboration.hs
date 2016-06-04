@@ -51,6 +51,7 @@ type Path = [Name]
 
 -- | A phase is either the minimum phase or the exact phase.
 data Phase = MinPhase Int | ExactPhase Int
+  deriving (Show)
 
 data Global = Global
   { gRuleId  :: Int
@@ -61,6 +62,7 @@ data Global = Global
   , gPeriod  :: Int
   , gPhase   :: Phase
   }
+  deriving (Show)
 
 initialGlobal :: Global
 initialGlobal = Global
@@ -113,6 +115,7 @@ data StateHierarchy
   = StateHierarchy Name [StateHierarchy]
   | StateVariable  Name Const
   | StateArray     Name [Const]
+  deriving (Show)
 
 instance Show AtomDB where show = atomName
 instance Eq   AtomDB where (==) = (==) `on` atomId
@@ -346,7 +349,12 @@ array name init' = do
   (st, (g, atom)) <- get
   let ua = UA (gArrayId g) name' c
       c = map constant init'
-  put (st, (g { gArrayId = gArrayId g + 1, gState = gState g ++ [StateArray name c] }, atom))
+  put (st, ( g { gArrayId = gArrayId g + 1
+               , gState = gState g ++ [StateArray name c]
+               }
+           , atom
+           )
+      )
   return $ A ua
 
 -- | Generic external array declaration.
@@ -375,7 +383,7 @@ checkName name =
 allUVs :: UeMap -> [Rule] -> Hash -> [MUV]
 allUVs st rules ue' = fixedpoint next $ nearestUVs ue' st
   where
-  assigns = concat [ ruleAssigns r | r@(Rule _ _ _ _ _ _ _) <- rules ]
+  assigns = concat [ ruleAssigns r | r@(Rule{}) <- rules ]
   previousUVs :: MUV -> [MUV]
   previousUVs u = concat [ nearestUVs ue_ st | (uv', ue_) <- assigns, u == uv' ]
   next :: [MUV] -> [MUV]
@@ -393,7 +401,7 @@ allUEs rule = ruleEnable rule : ues
   index (MUVArray _ ue') = [ue']
   index _ = []
   ues = case rule of
-    Rule _ _ _ _ _ _ _ ->
+    Rule{} ->
          concat [ ue' : index uv' | (uv', ue') <- ruleAssigns rule ]
       ++ concat (snd (unzip (ruleActions rule)))
     Assert _ _ a       -> [a]
