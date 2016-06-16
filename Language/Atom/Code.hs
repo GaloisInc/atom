@@ -422,6 +422,7 @@ declState define a' = if isHierarchyEmpty a' then ""
     StateVariable  name c     -> i ++ cType (E.typeOf c) ++ " " ++ name ++ ";\n"
     StateArray     name c     ->
       i ++ cType (E.typeOf $ head c) ++ " " ++ name ++ "[" ++ show (length c) ++ "];\n"
+    StateChannel{} -> error "declState: StateChannel case not implemented"
 
   f2 i a = case a of
     StateHierarchy name items ->
@@ -431,11 +432,13 @@ declState define a' = if isHierarchyEmpty a' then ""
     StateArray     name c     ->
          i ++ "/* " ++ name ++ " */\n" ++ i ++ "{ "
       ++ intercalate ("\n" ++ i ++ ", ") (map showConst c) ++ "\n" ++ i ++ "}"
+    StateChannel{} -> error "declState: StateChannel case not implemented"
 
   isHierarchyEmpty h = case h of
     StateHierarchy _ i -> if null i then True else and $ map isHierarchyEmpty i
     StateVariable _ _ -> False
     StateArray _ _ -> False
+    StateChannel{} -> error "declState: StateChannel case not implemented"
 
 codeRule :: UeMap -> Config -> Rule -> String
 codeRule mp config rule@(Rule _ _ _ _ _ _ _) =
