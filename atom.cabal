@@ -39,7 +39,8 @@ library
         process    ,
         syb        ,
         containers ,
-        bimap
+        bimap      ,
+        pretty
 
     exposed-modules:
         Language.Atom
@@ -55,6 +56,7 @@ library
         Language.Atom.Example.Gcd
         Language.Atom.Example.Probes
         Language.Atom.Expressions
+        Language.Atom.Inspect
         Language.Atom.Language
         Language.Atom.Scheduling
         Language.Atom.Unit
