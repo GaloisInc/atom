@@ -49,6 +49,10 @@ module Language.Atom.Language
   , float'
   , double
   , double'
+  -- * Channel Declarations
+  , channel
+  , ChanInput (..)
+  , ChanOutput (..)
   -- * Custom Actions
   , action
   , call

@@ -24,8 +24,7 @@ module Language.Atom
     -- * Common
     -- | Module: "Language.Atom.Common"
     Timer, timer, startTimer, startTimerIf, timerDone, oneShotRise,
-    oneShotFall, debounce, lookupTable, linear, hysteresis, Channel (..),
-    channel, writeChannel, readChannel,
+    oneShotFall, debounce, lookupTable, linear, hysteresis,
     -- ** Signal fading
     -- | Module: "Language.Atom.Common.Fader"
     Fader, FaderInit (..), fader, fadeToA, fadeToB, fadeToCenter,
@@ -43,6 +42,7 @@ module Language.Atom
     word16', word32, word32', word64, word64', float, float', double, double',
     action, call, probe, probes, assert, cover, assertImply, Name, liftIO,
     path, clock, nextCoverage,
+    channel, ChanInput (..), ChanOutput (..),
     -- * Expressions
     -- | Module: "Language.Atom.Expressions"
     E(..), V(..), UE(..), UV(..), A(..), UA(..), Expr(..), Expression(..),
