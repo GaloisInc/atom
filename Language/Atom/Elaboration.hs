@@ -387,6 +387,8 @@ channel name init' = do
   put (st, (g { gChannelId = gChannelId g + 1, gState = gState g ++ [StateChannel name c] }, atom))
   return (cin, cout)
 
+-- | Add a name to the AtomDB and check that it is unique, throws an exception
+-- if not.
 addName :: Name -> Atom Name
 addName name = do
   (st, (g, atom)) <- get
