@@ -1,2 +1,6 @@
 cabal-dev
 dist
+tags
+cabal.sandbox.config
+.cabal-sandbox
+exa.hs
