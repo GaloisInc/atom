@@ -344,7 +344,12 @@ var name init' = do
   (st, (g, atom)) <- get
   let uv' = UV (gVarId g) name' c
       c = constant init'
-  put (st, (g { gVarId = gVarId g + 1, gState = gState g ++ [StateVariable name c] }, atom))
+  put (st, ( g { gVarId = gVarId g + 1
+               , gState = gState g ++ [StateVariable name c]
+               }
+           , atom
+           )
+      )
   return $ V uv'
 
 -- | Generic external variable declaration.
