@@ -91,6 +91,7 @@ data AtomDB = AtomDB
   , atomSubs        :: [AtomDB]    -- ^ Sub atoms.
   , atomPeriod      :: Int
   , atomPhase       :: Phase
+    -- | Sequence of (variable, shared expr) assignments arising from '<=='
   , atomAssigns     :: [(MUV, Hash)]
   , atomActions     :: [([String] -> String, [Hash])]
   , atomAsserts     :: [(Name, Hash)]
