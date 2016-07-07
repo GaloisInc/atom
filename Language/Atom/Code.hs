@@ -444,6 +444,7 @@ declState define a' = if isHierarchyEmpty a' then ""
     StateArray _ _ -> False
     StateChannel{} -> error "declState: StateChannel case not implemented"
 
+-- | Generate C code for a rule
 codeRule :: UeMap -> Config -> Rule -> String
 codeRule mp config rule@(Rule _ _ _ _ _ _ _) =
   "/* " ++ show rule ++ " */\n" ++
@@ -465,6 +466,7 @@ codeRule mp config rule@(Rule _ _ _ _ _ _ _) =
   covWord = show $ div (ruleId rule) 32
   covBit  = show $ mod (ruleId rule) 32
 
+  -- Generate C code for a variable assignment
   codeAssign :: (MUV, Hash) -> String
   codeAssign (uv', ue') = concat ["  ", lh, " = ", id' ue', ";\n"]
     where
@@ -475,6 +477,7 @@ codeRule mp config rule@(Rule _ _ _ _ _ _ _) =
       MUVArray (UAExtern n _) index -> concat [n, "[", id' index, "]"]
       MUVExtern n _                 -> n
 
+-- Don't generate code for the 'Assert' or 'Cover' variants
 codeRule _ _ _ = ""
 
 -- | Global clock identifier
