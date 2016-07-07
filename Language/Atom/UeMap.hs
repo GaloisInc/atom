@@ -75,7 +75,8 @@ data UeElem
   | MUD2B      !Hash
   | MUB2F      !Hash
   | MUB2D      !Hash
--- math.h:
+
+  -- math.h:
   | MUPi
   | MUExp      !Hash
   | MULog      !Hash
@@ -120,7 +121,8 @@ typeOf h mp = case getUE h mp of
     MUD2B      _               -> Word64
     MUB2F      _               -> Float
     MUB2D      _               -> Double
--- math.h:
+
+    -- math.h:
     MUPi                       -> Double
     MUExp     a                -> typeOf' a
     MULog     a                -> typeOf' a
@@ -150,7 +152,8 @@ type UeState a = State UeMap a
 getUE :: Hash -> UeMap -> UeElem
 getUE h (_,mp) =
   case M.lookup h mp of
-    Nothing -> error $ "Error looking up hash " ++ show h ++ " in the UE map\n" ++ show mp
+    Nothing -> error $ "Error looking up hash " ++ show h
+                    ++ " in the UE map\n" ++ show mp
     Just e -> e
 
 -- | Put a new 'UE' in the map, unless it's already in there, and return the
@@ -189,7 +192,8 @@ share e = case e of
   UD2B      a     -> unOp a MUD2B
   UB2F      a     -> unOp a MUB2F
   UB2D      a     -> unOp a MUB2D
--- math.h:
+
+  -- math.h:
   UPi             -> maybeUpdate (MUPi)
   UExp      a     -> unOp a MUExp
   ULog      a     -> unOp a MULog
@@ -246,16 +250,6 @@ maybeUpdate e = do
                   return hash
     Just h -> return h
 
--- -- Lookup an elem, returning 'Nothing' if no hash exists in the map and 'Just'
--- -- the hash value otherwise.
--- getHash :: UeElem -> UeMap -> Maybe Hash
--- getHash e mp = M.lookupR e
-
-
--- ((k,e'):_) | e == e' = Just k
--- getHash e (_:es) | otherwise = getHash e es
--- getHash _ [] = Nothing
-
 -- | Get a 'UE' back out of the 'UeMap'.
 recoverUE :: UeMap -> Hash -> UE
 recoverUE st h = case getUE h st of
@@ -284,7 +278,8 @@ recoverUE st h = case getUE h st of
   MUD2B      a     -> UD2B      (recover' a)
   MUB2F      a     -> UB2F      (recover' a)
   MUB2D      a     -> UB2D      (recover' a)
--- math.h:
+
+  -- math.h:
   MUPi             -> UPi
   MUExp      a     -> UExp      (recover' a)
   MULog      a     -> ULog      (recover' a)
@@ -330,7 +325,8 @@ ueUpstream h t = case getUE h t of
   MUD2B      a               -> [a]
   MUB2F      a               -> [a]
   MUB2D      a               -> [a]
--- math.h:
+
+  -- math.h:
   MUPi                       -> []
   MUExp      a               -> [a]
   MULog      a               -> [a]
@@ -366,7 +362,7 @@ arrayIndices h mp = nub $ f h
              (MUVRef (MUVArray ua h')) -> (ua, h') : f h'
              _ -> concatMap f $ ueUpstream hash mp
 
--- XXX can put this back after making UE map---won't be expensive.
+-- | Determine if untyped expression involes a math.h function call
 isMathHCall :: UeElem -> Bool
 isMathHCall fc =
   case fc of

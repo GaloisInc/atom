@@ -25,10 +25,6 @@ module Language.Atom.Expressions
   , bytes
   , ue
   , uv
---  , ueUpstream
---  , isMathHCall
---  , nearestUVs
---  , arrayIndices
   , NumE
   , IntegralE
   , FloatingE
