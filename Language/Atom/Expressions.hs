@@ -95,14 +95,10 @@ import Data.Word
 
 import Data.Generics hiding ( typeOf )
 
---infixl 7 /., %.
---infixl 6 +., -.
---infixr 5 ++.
 infixl 9 !, !.
 infix  4 ==., /=., <., <=., >., >=.
-infixl 3 &&. --, ^. -- , &&&, $&, $&&
-infixl 2 ||. -- , |||, $$, $:, $|
---infixr 1 -- <==, <-- -- , |->, |=>, -->
+infixl 3 &&.
+infixl 2 ||.
 
 -- | The type of a 'E'.
 data Type
@@ -182,9 +178,9 @@ data V a = V UV deriving Eq
 
 -- | Untyped variables.
 data UV
-  = UV Int String Const
-  | UVArray UA UE
-  | UVExtern String Type
+  = UV Int String Const  -- ^ untyped var: internal ID, name, initial value
+  | UVArray UA UE        -- ^ untyped array: UA value, initial value expression
+  | UVExtern String Type -- ^ external variable: name, type
   deriving (Show, Eq, Ord, Data, Typeable)
 
 -- | A typed array.
@@ -192,8 +188,8 @@ data A a = A UA deriving Eq
 
 -- | An untyped array.
 data UA
-  = UA Int String [Const]
-  | UAExtern String Type
+  = UA Int String [Const]  -- ^ untyped array: internal ID, name, initial values
+  | UAExtern String Type   -- ^ external array: name, type
   deriving (Show, Eq, Ord, Data, Typeable)
 
 -- | A typed expression.
@@ -222,7 +218,8 @@ data E a where
   B2F      :: E Word32 -> E Float
   B2D      :: E Word64 -> E Double
   Retype   :: UE -> E a
--- math.h:
+
+  -- math.h:
   Pi       :: FloatingE a => E a
   Exp      :: FloatingE a => E a -> E a
   Log      :: FloatingE a => E a -> E a
@@ -270,7 +267,8 @@ data UE
   | UD2B      UE
   | UB2F      UE
   | UB2D      UE
--- math.h:
+
+  -- math.h:
   | UPi
   | UExp      UE
   | ULog      UE
@@ -378,8 +376,9 @@ instance TypeOf UE where
     UD2B      _     -> Word64
     UB2F      _     -> Float
     UB2D      _     -> Double
--- math.h:
-    UPi           -> Double
+
+    -- math.h:
+    UPi             -> Double
     UExp      a     -> typeOf a
     ULog      a     -> typeOf a
     USqrt     a     -> typeOf a
@@ -917,9 +916,9 @@ ult a b = ULt a b
 -- | 2-to-1 multiplexer. If selector is true, this returns input 1; if
 -- selector is false, this returns input 2.
 umux :: UE -- ^ Selector
-        -> UE -- ^ Input 1
-        -> UE -- ^ Input 2
-        -> UE
+     -> UE -- ^ Input 1
+     -> UE -- ^ Input 2
+     -> UE
 umux _ t f | t == f = f
 umux b t f | typeOf t == Bool = uor (uand b t) (uand (unot b) f)
 umux (UConst (CBool b)) t f = if b then t else f
@@ -927,88 +926,3 @@ umux (UNot b) t f = umux b f t
 umux b1 (UMux b2 t _) f | b1 == b2 = umux b1 t f
 umux b1 t (UMux b2 _ f) | b1 == b2 = umux b1 t f
 umux b t f = UMux b t f
-
-{-
--- | Balances mux trees in expression.  Reduces critical path at cost of additional logic.
-balance :: UE -> UE
-balance ue = case ue of
-  UVRef _      -> ue
-  UCast t a    -> UCast t (balance a)
-  UConst _     -> ue
-  UAdd a b     -> UAdd   (balance a) (balance b)
-  USub a b     -> USub   (balance a) (balance b)
-  UMul a b     -> UMul   (balance a) (balance b)
-  UDiv a b     -> UDiv   (balance a) (balance b)
-  UMod a b     -> UMod   (balance a) (balance b)
-  UNot a       -> UNot   (balance a)
-  UAnd a       -> UAnd   (map balance a)
-  UBWNot a     -> UBWNot (balance a)
-  UBWAnd a b   -> UBWAnd (balance a) (balance b)
-  UBWOr  a b   -> UBWOr  (balance a) (balance b)
-  UShift a b   -> UShift (balance a) (balance b)
-  UEq  a b     -> UEq    (balance a) (balance b)
-  ULt  a b     -> ULt    (balance a) (balance b)
-  UMux a t f   -> rotate $ umux a t' f'
-    where
-    t' = balance t
-    f' = balance f
-    depth :: UE -> Int
-    depth (UMux _ t f) = 1 + max (depth t) (depth f)
-    depth _            = 0
-    rotate :: UE -> UE
-    rotate ue = case ue of
-      UMux a1 t1@(UMux a2 t2 f2) f1 | depth t1 >= depth f1 + 2 -> umux (uand a1 a2) t2 (umux a1 f2 f1)
-      UMux a1 t1 f1@(UMux a2 t2 f2) | depth f1 >= depth t1 + 2 -> umux (uor  a1 a2) (umux a1 t1 t2) f2
-      _ -> ue
--}
-
--- Idea analyzing a pair of comparisons with one common operand: take to other two operands and construct the appropriate
--- expression and check never.
--- never (a == x) && (a == y)  =>  never (x == y)
--- never (a == x) && (a <  y)  =>  never (x >= y)
--- never (a == x) && (a /= y)  =>  never (x == y)
--- never (a == x) || (a == y)  =>  never (x == y)
-{-
-isExclusiveCompare :: (ConstantCompare, ConstantCompare) -> Bool
-isExclusiveCompare a = case a of
-  (Equal a, Equal     b) -> a /= b
-  (Equal a, NotEqual  b) -> a == b
-  (Equal a, Less      b) -> a >= b
-  (Equal a, LessEqual b) -> a >  b
-  (Equal a, More      b) -> a <= b
-  (Equal a, MoreEqual b) -> a <  b
-
-  (NotEqual a, Equal     b) -> a == b
-  (NotEqual _, _)           -> False
-
-  (Less  a, Equal     b) -> a <= b
-  (Less  a, More      b) -> a <= b
-  (Less  a, MoreEqual b) -> a <= b
-  (Less  _, _)           -> False
-
-  (LessEqual  a, Equal     b) -> a <  b
-  (LessEqual  a, More      b) -> a <= b
-  (LessEqual  a, MoreEqual b) -> a <  b
-  (LessEqual  _, _)           -> False
-
-  (More  a, Equal     b) -> a >= b
-  (More  a, Less      b) -> a >= b
-  (More  a, LessEqual b) -> a >= b
-  (More  _, _)           -> False
-
-  (MoreEqual  a, Equal     b) -> a >  b
-  (MoreEqual  a, Less      b) -> a >= b
-  (MoreEqual  a, LessEqual b) -> a >  b
-  (MoreEqual  _, _)           -> False
-
-data ConstantCompare
-  = Equal     TermConst
-  | NotEqual  TermConst
-  | Less      TermConst
-  | LessEqual TermConst
-  | More      TermConst
-  | MoreEqual TermConst
-  deriving (Eq, Ord)
--}
-
---data NetList = NetList Int (IntMap UE)
