@@ -168,7 +168,7 @@ codeUE mp config ues d (ue', n) =
     MUD2B _        -> ["*((", ct Word64, " *) &(", a, "))"]
     MUB2F _        -> ["*((", ct Float , " *) &(", a, "))"]
     MUB2D _        -> ["*((", ct Double, " *) &(", a, "))"]
--- math.h:
+    -- math.h:
     MUPi           -> [ "M_PI" ]
     MUExp   _      -> [ "exp",   f, " ( ", a, " )"]
     MULog   _      -> [ "log",   f, " ( ", a, " )"]
@@ -195,13 +195,6 @@ codeUE mp config ues d (ue', n) =
             _         -> error "unhandled float type"
 
 type RuleCoverage = [(Name, Int, Int)]
-
--- containMathHFunctions :: [Rule] -> Bool
--- containMathHFunctions rules =
---   any math rules
---   where math rule = case rule of
---                       Rule _ _ _ _ _ _ _ b -> b
---                       _                    -> False
 
 writeC :: Name -> Config -> StateHierarchy -> [Rule] -> Schedule -> [Name]
        -> [Name] -> [(Name, Type)] -> IO RuleCoverage
