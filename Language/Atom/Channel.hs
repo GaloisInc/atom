@@ -24,8 +24,9 @@ channel name init' = do
   let cin  = mkChanInput (gChannelId g) name'
       cout = mkChanOutput (gChannelId g) name'
       c    = constant init'
+      f    = constant False
   put (st, ( g { gChannelId = gChannelId g + 1
-               , gState = gState g ++ [StateChannel name c]
+               , gState = gState g ++ [StateChannel name c f]
                }
            , atom
            )

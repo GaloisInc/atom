@@ -118,7 +118,7 @@ data StateHierarchy
   = StateHierarchy Name [StateHierarchy]
   | StateVariable  Name Const
   | StateArray     Name [Const]
-  | StateChannel   Name Const
+  | StateChannel   Name Const Const
   deriving (Show)
 
 instance Show AtomDB where show = atomName
