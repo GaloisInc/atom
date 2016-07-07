@@ -773,7 +773,7 @@ a !. i = value $ a ! i
 -- | Converts an typed expression (E a) to an untyped expression (UE).
 ue :: Expr a => E a -> UE
 ue t = case t of
-  VRef     (V v)   -> UVRef v
+  VRef     (V v) -> UVRef v
   Const    a     -> UConst  $ constant a
   Cast     a     -> UCast     tt (ue a)
   Add      a b   -> UAdd      (ue a) (ue b)
@@ -797,8 +797,9 @@ ue t = case t of
   B2F      a     -> UB2F      (ue a)
   B2D      a     -> UB2D      (ue a)
   Retype   a     -> a
--- math.h:
-  Pi           -> UPi
+
+  -- math.h:
+  Pi             -> UPi
   Exp      a     -> UExp      (ue a)
   Log      a     -> ULog      (ue a)
   Sqrt     a     -> USqrt     (ue a)
@@ -846,13 +847,16 @@ uand (UAnd a) b                     = reduceAnd $ b : a
 uand a (UAnd b)                     = reduceAnd $ a : b
 uand a b                            = reduceAnd [a, b]
 
+-- | Apply some specific rewrites to conjunctive terms
 reduceAnd :: [UE] -> UE
 
 -- a && not a
-reduceAnd terms | not $ null [ e | e <- terms, e' <- map unot terms, e == e' ] = ubool False
+reduceAnd terms | not $ null [ e | e <- terms, e' <- map unot terms, e == e' ] =
+                  ubool False
 
 -- a == x && a == y && x /= y
-reduceAnd terms | or [ f a b | a <- terms, b <- terms ]                        = ubool False
+reduceAnd terms | or [ f a b | a <- terms, b <- terms ] =
+                  ubool False
   where
   f :: UE -> UE -> Bool
   f (UEq a b) (UEq x y) | a == x = yep $ ueq b y
@@ -865,7 +869,9 @@ reduceAnd terms | or [ f a b | a <- terms, b <- terms ]                        =
   yep _ = False
 
 -- a && b && not (a && b)
-reduceAnd terms | not $ null [ e | e <- terms, not $ null $ f e, all (flip elem terms) $ f e ] = ubool False
+reduceAnd terms | not $ null [ e | e <- terms, not $ null $ f e
+                                             , all (flip elem terms) $ f e ] =
+                  ubool False
   where
   f :: UE -> [UE]
   f (UNot (UAnd a)) = a
@@ -896,8 +902,8 @@ ueq a b = UEq a b
 
 -- | Less-than inequality on two untyped expressions
 ult :: UE -- ^ a
-       -> UE -- ^ b
-       -> UE -- ^ a < b
+    -> UE -- ^ b
+    -> UE -- ^ a < b
 ult a b | a == b = ubool False
 ult (UConst (CBool   a)) (UConst (CBool   b)) = ubool $ a < b
 ult (UConst (CInt8   a)) (UConst (CInt8   b)) = ubool $ a < b
