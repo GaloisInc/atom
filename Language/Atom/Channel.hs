@@ -55,9 +55,9 @@ mkChanOutput = ChanOutput
 
 -- Channel Operations --------------------------------------------------
 
--- | Write a message to a typed channel. This is a NOP if there is an unread
--- message waiting in the channel.
-writeChannel :: Expr a => ChanInput a -> a -> Atom ()
+-- | Write a message to a typed channel. This is a NOP and returns False if
+-- there is an unread message waiting in the channel.
+writeChannel :: Expr a => ChanInput a -> a -> Atom Bool
 writeChannel _cin _e = error "writeChannel not implemented"
 
 -- | Read a message from a typed channel. This operation returns the last
