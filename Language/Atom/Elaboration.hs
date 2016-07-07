@@ -23,17 +23,11 @@ module Language.Atom.Elaboration
   , var'
   , array
   , array'
-  , channel
   , addName
   , get
   , put
   , allUVs
   , allUEs
-  -- * Channels
-  , ChanInput (..)   -- ^ channel input handle
-  , ChanOutput (..)   -- ^ channel output handle
-  , mkChanInput
-  , mkChanOutput
   ) where
 
 import Control.Monad (ap)
@@ -376,17 +370,6 @@ array name init' = do
 array' :: Expr a => Name -> Type -> A a
 array' name t = A $ UAExtern  name t
 
--- | Declare a typed channel. Returns channel input/output handles.
-channel :: Expr a => Name -> a -> Atom (ChanInput a, ChanOutput a)
-channel name init' = do
-  name' <- addName name
-  (st, (g, atom)) <- get
-  let cin  = mkChanInput (gChannelId g) name'
-      cout = mkChanOutput (gChannelId g) name'
-      c    = constant init'
-  put (st, (g { gChannelId = gChannelId g + 1, gState = gState g ++ [StateChannel name c] }, atom))
-  return (cin, cout)
-
 -- | Add a name to the AtomDB and check that it is unique, throws an exception
 -- if not.
 addName :: Name -> Atom Name
@@ -434,24 +417,3 @@ allUEs rule = ruleEnable rule : ues
       ++ concat (snd (unzip (ruleActions rule)))
     Assert _ _ a       -> [a]
     Cover  _ _ a       -> [a]
-
-
--- Channels ------------------------------------------------------------
-
-data ChanInput a = ChanInput
-  { cinID   :: Int
-  , cinName :: Name
-  }
-  deriving (Eq, Show)
-
-mkChanInput :: Expr a => Int -> Name -> ChanInput a
-mkChanInput = ChanInput
-
-data ChanOutput a = ChanOutput
-  { coutID   :: Int
-  , coutName :: Name
-  }
-  deriving (Eq, Show)
-
-mkChanOutput :: Expr a => Int -> Name -> ChanOutput a
-mkChanOutput = ChanOutput

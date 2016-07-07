@@ -45,6 +45,7 @@ library
     exposed-modules:
         Language.Atom
         Language.Atom.Analysis
+        Language.Atom.Channel
         Language.Atom.Code
         Language.Atom.Common
         Language.Atom.Common.Fader

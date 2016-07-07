@@ -8,6 +8,7 @@
 module Language.Atom.Language
   (
     module Language.Atom.Expressions
+  , module Language.Atom.Channel
   -- * Primary Language Containers
   , Atom
   -- * Hierarchical Rule Declarations
@@ -49,10 +50,6 @@ module Language.Atom.Language
   , float'
   , double
   , double'
-  -- * Channel Declarations
-  , channel
-  , ChanInput (..)
-  , ChanOutput (..)
   -- * Custom Actions
   , action
   , call
@@ -78,6 +75,7 @@ import Data.Int
 import Data.Word
 import Data.List (foldl')
 
+import Language.Atom.Channel
 import Language.Atom.Elaboration hiding (Atom)
 import qualified Language.Atom.Elaboration as E
 import Language.Atom.Expressions
