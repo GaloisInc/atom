@@ -104,6 +104,7 @@ defaultClock = Clock { clockName = "clk"
                      , err = Nothing
                      }
 
+-- | Render constant literals
 showConst :: Const -> String
 showConst c = case c of
   CBool True  -> "true"
@@ -135,7 +136,13 @@ cType t = case t of
   Float  -> "float"
   Double -> "double"
 
-codeUE :: UeMap -> Config -> [(Hash, String)] -> String -> (Hash, String) -> String
+-- | Generate C code for the declaration of a given named, untyped expression
+codeUE :: UeMap             -- ^ untyped expression map
+       -> Config            -- ^ C code generator configuration
+       -> [(Hash, String)]  -- ^ hash, name pairs for the operands of the expr
+       -> String            -- ^ declaration prefix (e.g. static)
+       -> (Hash, String)    -- ^ hash, name of expression to render
+       -> String
 codeUE mp config ues d (ue', n) =
   d ++ cType (typeOf ue' mp) ++ " " ++ n ++ " = " ++ basic ++ ";\n"
   where
@@ -196,6 +203,7 @@ codeUE mp config ues d (ue', n) =
 
 type RuleCoverage = [(Name, Int, Int)]
 
+-- | The top-level C code generator
 writeC :: Name -> Config -> StateHierarchy -> [Rule] -> Schedule -> [Name]
        -> [Name] -> [(Name, Type)] -> IO RuleCoverage
 writeC name config state rules (mp, schedule') assertionNames coverageNames probeNames = do
@@ -242,6 +250,7 @@ writeC name config state rules (mp, schedule') assertionNames coverageNames prob
 
   codePeriodPhases = concatMap (codePeriodPhase config) schedule'
 
+  -- Generate code for handling a hardware clock if needed
   swOrHwClock =
     case hardwareClock config of
       Nothing      -> ""
@@ -399,9 +408,11 @@ writeC name config state rules (mp, schedule') assertionNames coverageNames prob
   lastPhaseStartTime = "__last_phase_start_time"
 
 
+-- | Optionally render the given code string
 codeIf :: Bool -> String -> String
 codeIf a b = if a then b else ""
 
+-- | Generate a C declaration of the global state struct
 declState :: Bool -> StateHierarchy -> String
 declState define a' = if isHierarchyEmpty a' then ""
   else
@@ -466,9 +477,11 @@ codeRule mp config rule@(Rule _ _ _ _ _ _ _) =
 
 codeRule _ _ _ = ""
 
+-- | Global clock identifier
 globalClk :: String
 globalClk = "__global_clock"
 
+-- | Generate C assertions for each Atom assertion
 codeAssertionChecks :: UeMap -> Config -> [Name] -> [Name] -> [Rule] -> String
 codeAssertionChecks mp config assertionNames coverageNames rules =
   codeIf (cAssert config) $
@@ -492,6 +505,8 @@ codeAssertionChecks mp config assertionNames coverageNames rules =
   coverageId :: Name -> String
   coverageId name = show $ fromJust $ elemIndex name coverageNames
 
+-- | Generate code that schedules calls to rules according to the given period
+-- and phase offset
 codePeriodPhase :: Config -> (Int, Int, [Rule]) -> String
 codePeriodPhase config (period, phase, rules) = unlines
   [ printf "  {"
