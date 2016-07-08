@@ -153,6 +153,7 @@ codeUE mp config ues d (ue', n) =
     MUVRef (MUVArray (UA _ k _) _)     -> [cStateName config, ".", k, "[", a, "]"]
     MUVRef (MUVArray (UAExtern k _) _) -> [k, "[", a, "]"]
     MUVRef (MUVExtern k _)             -> [k]
+    MUVRef (MUVChannel _ k _)          -> [cStateName config, ".", channelPrefix, k]
     MUCast _ _     -> ["(", cType (typeOf ue' mp), ") ", a]
     MUConst c_     -> [showConst c_]
     MUAdd _ _      -> [a, " + ", b]
@@ -204,208 +205,234 @@ codeUE mp config ues d (ue', n) =
 type RuleCoverage = [(Name, Int, Int)]
 
 -- | The top-level C code generator
-writeC :: Name -> Config -> StateHierarchy -> [Rule] -> Schedule -> [Name]
-       -> [Name] -> [(Name, Type)] -> IO RuleCoverage
-writeC name config state rules (mp, schedule') assertionNames coverageNames probeNames = do
-  writeFile (name ++ ".c") c
-  writeFile (name ++ ".h") h
-  return [ (ruleName r, div (ruleId r) 32, mod (ruleId r) 32) | r <- rules' ]
+writeC
+  :: Name            -- ^ module name
+  -> Config          -- ^ code gen configuration parameters
+  -> StateHierarchy  -- ^ representation of the global state struct
+  -> [Rule]          -- ^ list of atom rules to generate code for
+  -> Schedule        -- ^ pre-computed execution schedule
+  -> [Name]          -- ^ assertion names
+  -> [Name]          -- ^ coverage names
+  -> [(Name, Type)]  -- ^ probe name, type pairs
+  -> IO RuleCoverage
+writeC name config state rules (mp, schedule') assertNames coverNames probeNames = do
+    writeFile (name ++ ".c") c
+    writeFile (name ++ ".h") h
+    return [ (ruleName r, div (ruleId r) 32, mod (ruleId r) 32) | r <- rules' ]
   where
-  (preCode,  postCode)  = cCode config assertionNames coverageNames probeNames
-  (preHCode, postHCode) = hCode config assertionNames coverageNames probeNames
-  c = unlines
-    [ "#include <stdbool.h>"
-    , "#include <stdint.h>"
-    , codeIf (M.fold (\_ e ans -> isMathHCall e || ans ) False (snd mp))
-             "#include <math.h>"
-    , ""
-    , preCode
-    , ""
-    , "static " ++ globalType ++ " " ++ globalClk ++ " = 0;"
-    , ""
-    , case hardwareClock config of
-        Nothing -> ""
-        Just _  -> "static " ++ globalType ++ " " ++ phaseStartTime ++ ";"
-    , ""
-    , codeIf (cRuleCoverage config) $ "static const " ++ cType Word32
-                 ++ " __coverage_len = " ++ show covLen ++ ";"
-    , codeIf (cRuleCoverage config) $ "static " ++ cType Word32
-                 ++ " __coverage[" ++ show covLen ++ "] = {"
-                 ++ (concat $ intersperse ", " $ replicate covLen "0") ++ "};"
-    , codeIf (cRuleCoverage config)
-             ("static " ++ cType Word32 ++ " __coverage_index = 0;")
-    , declState True (StateHierarchy (cStateName config) [state])
-    , concatMap (codeRule mp config) rules'
-    , codeAssertionChecks mp config assertionNames coverageNames rules
-    , "void " ++ funcName ++ "()"
-    , "{"
-    , unlines [ swOrHwClock
-              , codePeriodPhases
-              , "  " ++ globalClk ++ " = " ++ globalClk ++ " + 1;"
-              ]
-    , "}"
-    , ""
-    , postCode
-    ]
+    (preCode,  postCode)  = cCode config assertNames coverNames probeNames
+    (preHCode, postHCode) = hCode config assertNames coverNames probeNames
 
-  codePeriodPhases = concatMap (codePeriodPhase config) schedule'
+    -- lines of C code to write to file
+    c = unlines
+      [ -- includes
+        "#include <stdbool.h>"
+      , "#include <stdint.h>"
+      , codeIf (M.fold (\_ e ans -> isMathHCall e || ans ) False (snd mp))
+               "#include <math.h>"
+      , ""
+        -- preamble code supplied by user
+      , preCode
+      , ""
+        -- global clock variable declaration
+      , "static " ++ globalType ++ " " ++ globalClk ++ " = 0;"
+      , ""
+        -- global phase start variable declaration
+      , case hardwareClock config of
+          Nothing -> ""
+          Just _  -> "static " ++ globalType ++ " " ++ phaseStartTime ++ ";"
+      , ""
+        -- global rule coverage variable declarations
+      , codeIf (cRuleCoverage config) $ "static const " ++ cType Word32
+                   ++ " __coverage_len = " ++ show covLen ++ ";"
+      , codeIf (cRuleCoverage config) $ "static " ++ cType Word32
+                   ++ " __coverage[" ++ show covLen ++ "] = {"
+                   ++ (concat $ intersperse ", " $ replicate covLen "0") ++ "};"
+      , codeIf (cRuleCoverage config)
+               ("static " ++ cType Word32 ++ " __coverage_index = 0;")
 
-  -- Generate code for handling a hardware clock if needed
-  swOrHwClock =
-    case hardwareClock config of
-      Nothing      -> ""
-      Just clkData -> unlines
-        [ ""
-        , "  " ++ declareConst phaseConst clkDelta
-        , "  " ++ declareConst maxConst   maxVal
-        , "  static " ++ globalType ++ " " ++ lastPhaseStartTime ++ ";"
-        , "  static " ++ globalType ++ " " ++ lastTime ++ ";"
-        , "  static bool __first_call = true;"
-        , "  " ++ globalType ++ " " ++ currentTime ++ ";"
-        , ""
-        , "  /* save the current time */"
-        , "  " ++ setTime
-        , ""
-        , "  /* initialize static variables on the first call */"
-        , "  if ( __first_call ) {"
-        , "    " ++ lastPhaseStartTime ++ " = " ++ phaseStartTime ++ ";"
-        , "    " ++ lastTime ++ " = " ++ currentTime ++ ";"
-        , "    __first_call = false;"
-        , "  }"
-        , ""
-        , "  /* wait for the amount left for the phase start time to be reached,"
-        , "     handle roll-overs of the system timer and the phase start time */"
-        , "  if ( " ++ phaseStartTime ++ " >= " ++ lastPhaseStartTime ++ " ) {"
-        , "    /* phase start time did not roll over */"
-        , "    if ( " ++ currentTime ++ " >= " ++ lastTime ++ " ) {"
-        , "      /* system time and the phase start time did not roll over */"
-        , "      if ( " ++ phaseStartTime ++ " >= " ++ currentTime ++ " ) {"
-        , "        " ++ delayFn ++ " ( " ++ phaseStartTime ++ " - " ++ currentTime ++ " );"
-        , "      } else {"
-        , "        /* we are late */"
-        , "        " ++ errHandler
-        , "      }"
-        , "    } else {"
-        , "      /* system time rolled over, the start time of the"
-        , "         phase did not, i.e. we are not late if currentTime"
-        , "         is already in between lastPhaseStartTime and phaseStartTime */"
-        , "      if ( ( " ++ currentTime ++ " >= " ++ lastPhaseStartTime ++ " )"
-        , "             && ( " ++ phaseStartTime ++ " >= " ++ currentTime ++ " ) ) {"
-        , "        " ++ delayFn ++ " ( " ++ phaseStartTime ++ " - " ++ currentTime ++ " );"
-        , "      } else {"
-        , "        /* we are late */"
-        , "        " ++ errHandler
-        , "      }"
-        , "    }"
-        , "  } else {"
-        , "    /* phase start time rolled over */"
-        , "    if ( " ++ currentTime ++ " >= " ++ lastTime ++ " ) {"
-        , "      /* current time did not yet roll over */"
-        , "      if ( " ++ currentTime ++ " >= " ++ phaseStartTime ++ " ) {"
-        , "        " ++ delayFn ++ " ( ( " ++ maxConst
-                         ++ " - ( " ++ currentTime
-                             ++ " - " ++ phaseStartTime ++ " ) + 1 )" ++ " );"
-        , "      } else {"
-        , "        /* this should not happen, since " ++ phaseConst ++ " should be"
-        , "           smaller than " ++ maxConst ++ " and " ++ lastTime ++ " should"
-        , "           be smaller than or equal to " ++ currentTime ++ " */"
-        , "        " ++ errHandler
-        , "      }"
-        , "    } else {"
-        , "      /* current time and phase start time rolled over"
-        , "         equal to the first case */"
-        , "      if ( " ++ phaseStartTime ++ " >= " ++ currentTime ++ " ) {"
-        , "        " ++ delayFn ++ " ( " ++ phaseStartTime ++ " - " ++ currentTime ++ " );"
-        , "      } else {"
-        , "        /* we are late */"
-        , "        " ++ errHandler
-        , "      }"
-        , "    }"
-        , "  }"
-        , ""
-        , ""
-        , "  /* update to the next phase start time */"
-        , "  " ++ lastPhaseStartTime ++ " = " ++ phaseStartTime ++ ";"
-        , "  " ++ phaseStartTime ++ " = " ++ phaseStartTime ++ " + "
-               ++ phaseConst ++ ";"
-        , "  " ++ lastTime ++ " = " ++ currentTime ++ ";"
-        ]
-        where
-          delayFn = delay clkData
-          maxVal :: Integer
-          maxVal  = case clockType clkData of
-                      Word8  -> toInteger (maxBound :: Word8)
-                      Word16 -> toInteger (maxBound :: Word16)
-                      Word32 -> toInteger (maxBound :: Word32)
-                      Word64 -> toInteger (maxBound :: Word64)
-                      _      -> clkTypeErr
-          declareConst varName c' = globalType ++ " const " ++ varName
-                                   ++ " = " ++ showConst (constType c') ++ ";"
-          setTime     = currentTime ++ " = " ++ clockName clkData ++ "();"
-          maxConst    = "__max"
-          phaseConst  = "__phase_len"
-          currentTime = "__curr_time"
-          lastTime    = "__last_time"
-          clkDelta | d <= 0
-                       = error $ "The delta "
-                                 ++ show d
-                                 ++ ", given for the number of ticks "
-                                 ++ "in a phase must be greater than 0."
-                   | d > maxVal
-                       = error $ "The delta "
-                         ++ show d
-                         ++ ", given for the number of ticks in a phase "
-                         ++ "must be smaller than "
-                         ++ show ( maxVal + 1 )
-                         ++ "."
-                   | otherwise
-                       = d
-            where d = delta clkData
-          errHandler =
-            case err clkData of
-              Nothing    -> ""
-              Just errF  -> errF ++ " ();"
-          constType :: Integer -> Const
-          constType c' = case clockType clkData of
-                          Word8  -> CWord8  (fromInteger c' :: Word8)
-                          Word16 -> CWord16 (fromInteger c' :: Word16)
-                          Word32 -> CWord32 (fromInteger c' :: Word32)
-                          Word64 -> CWord64 (fromInteger c' :: Word64)
-                          _      -> clkTypeErr
+        -- global state struct declaration
+      , declState True (StateHierarchy (cStateName config) [state])
 
-  h = unlines
-    [ "#include <stdbool.h>"
-    , "#include <stdint.h>"
-    , ""
-    , preHCode
-    , ""
-    , "void " ++ funcName ++ "();"
-    , ""
-    , declState False (StateHierarchy (cStateName config) [state])
-    , ""
-    , postHCode
-    ]
+        -- generate functions for each rule
+      , concatMap (codeRule mp config) rules'
 
-  globalType = cType (case hardwareClock config of
-                        Nothing      -> Word64 -- Default type
-                        Just clkData -> case clockType clkData of
-                                          Word8  -> Word8
-                                          Word16 -> Word16
-                                          Word32 -> Word32
-                                          Word64 -> Word64
-                                          _      -> clkTypeErr)
-  clkTypeErr :: a
-  clkTypeErr = error "Clock type must be one of Word8, Word16, Word32, Word64."
+        -- generate assertion checks
+      , codeAssertionChecks mp config assertNames coverNames rules
 
-  funcName = if null (cFuncName config) then name else cFuncName config
+        -- generate "main" (at least as far as Atom is concerned)
+      , "void " ++ funcName ++ "()"
+      , "{"
+      , unlines [ swOrHwClock
+                , codePeriodPhases
+                , "  " ++ globalClk ++ " = " ++ globalClk ++ " + 1;"
+                ]
+      , "}"
+      , ""
+      , postCode
+      ]
 
-  rules' :: [Rule]
-  rules' = concat [ r | (_, _, r) <- schedule' ]
+    -- | Generate period/phase scheduling code
+    codePeriodPhases :: String
+    codePeriodPhases = concatMap (codePeriodPhase config) schedule'
 
-  covLen = 1 + div (maximum $ map ruleId rules') 32
+    -- Generate code for handling a hardware clock if needed
+    swOrHwClock =
+      case hardwareClock config of
+        Nothing      -> ""
+        Just clkData -> unlines
+          [ ""
+          , "  " ++ declareConst phaseConst clkDelta
+          , "  " ++ declareConst maxConst   maxVal
+          , "  static " ++ globalType ++ " " ++ lastPhaseStartTime ++ ";"
+          , "  static " ++ globalType ++ " " ++ lastTime ++ ";"
+          , "  static bool __first_call = true;"
+          , "  " ++ globalType ++ " " ++ currentTime ++ ";"
+          , ""
+          , "  /* save the current time */"
+          , "  " ++ setTime
+          , ""
+          , "  /* initialize static variables on the first call */"
+          , "  if ( __first_call ) {"
+          , "    " ++ lastPhaseStartTime ++ " = " ++ phaseStartTime ++ ";"
+          , "    " ++ lastTime ++ " = " ++ currentTime ++ ";"
+          , "    __first_call = false;"
+          , "  }"
+          , ""
+          , "  /* wait for the amount left for the phase start time to be reached,"
+          , "     handle roll-overs of the system timer and the phase start time */"
+          , "  if ( " ++ phaseStartTime ++ " >= " ++ lastPhaseStartTime ++ " ) {"
+          , "    /* phase start time did not roll over */"
+          , "    if ( " ++ currentTime ++ " >= " ++ lastTime ++ " ) {"
+          , "      /* system time and the phase start time did not roll over */"
+          , "      if ( " ++ phaseStartTime ++ " >= " ++ currentTime ++ " ) {"
+          , "        " ++ delayFn ++ " ( " ++ phaseStartTime ++ " - " ++ currentTime ++ " );"
+          , "      } else {"
+          , "        /* we are late */"
+          , "        " ++ errHandler
+          , "      }"
+          , "    } else {"
+          , "      /* system time rolled over, the start time of the"
+          , "         phase did not, i.e. we are not late if currentTime"
+          , "         is already in between lastPhaseStartTime and phaseStartTime */"
+          , "      if ( ( " ++ currentTime ++ " >= " ++ lastPhaseStartTime ++ " )"
+          , "             && ( " ++ phaseStartTime ++ " >= " ++ currentTime ++ " ) ) {"
+          , "        " ++ delayFn ++ " ( " ++ phaseStartTime ++ " - " ++ currentTime ++ " );"
+          , "      } else {"
+          , "        /* we are late */"
+          , "        " ++ errHandler
+          , "      }"
+          , "    }"
+          , "  } else {"
+          , "    /* phase start time rolled over */"
+          , "    if ( " ++ currentTime ++ " >= " ++ lastTime ++ " ) {"
+          , "      /* current time did not yet roll over */"
+          , "      if ( " ++ currentTime ++ " >= " ++ phaseStartTime ++ " ) {"
+          , "        " ++ delayFn ++ " ( ( " ++ maxConst
+                           ++ " - ( " ++ currentTime
+                               ++ " - " ++ phaseStartTime ++ " ) + 1 )" ++ " );"
+          , "      } else {"
+          , "        /* this should not happen, since " ++ phaseConst ++ " should be"
+          , "           smaller than " ++ maxConst ++ " and " ++ lastTime ++ " should"
+          , "           be smaller than or equal to " ++ currentTime ++ " */"
+          , "        " ++ errHandler
+          , "      }"
+          , "    } else {"
+          , "      /* current time and phase start time rolled over"
+          , "         equal to the first case */"
+          , "      if ( " ++ phaseStartTime ++ " >= " ++ currentTime ++ " ) {"
+          , "        " ++ delayFn ++ " ( " ++ phaseStartTime ++ " - " ++ currentTime ++ " );"
+          , "      } else {"
+          , "        /* we are late */"
+          , "        " ++ errHandler
+          , "      }"
+          , "    }"
+          , "  }"
+          , ""
+          , ""
+          , "  /* update to the next phase start time */"
+          , "  " ++ lastPhaseStartTime ++ " = " ++ phaseStartTime ++ ";"
+          , "  " ++ phaseStartTime ++ " = " ++ phaseStartTime ++ " + "
+                 ++ phaseConst ++ ";"
+          , "  " ++ lastTime ++ " = " ++ currentTime ++ ";"
+          ]
+          where
+            delayFn = delay clkData
+            maxVal :: Integer
+            maxVal  = case clockType clkData of
+                        Word8  -> toInteger (maxBound :: Word8)
+                        Word16 -> toInteger (maxBound :: Word16)
+                        Word32 -> toInteger (maxBound :: Word32)
+                        Word64 -> toInteger (maxBound :: Word64)
+                        _      -> clkTypeErr
+            declareConst varName c' = globalType ++ " const " ++ varName
+                                     ++ " = " ++ showConst (constType c') ++ ";"
+            setTime     = currentTime ++ " = " ++ clockName clkData ++ "();"
+            maxConst    = "__max"
+            phaseConst  = "__phase_len"
+            currentTime = "__curr_time"
+            lastTime    = "__last_time"
+            clkDelta | d <= 0
+                         = error $ "The delta "
+                                   ++ show d
+                                   ++ ", given for the number of ticks "
+                                   ++ "in a phase must be greater than 0."
+                     | d > maxVal
+                         = error $ "The delta "
+                           ++ show d
+                           ++ ", given for the number of ticks in a phase "
+                           ++ "must be smaller than "
+                           ++ show ( maxVal + 1 )
+                           ++ "."
+                     | otherwise
+                         = d
+              where d = delta clkData
+            errHandler =
+              case err clkData of
+                Nothing    -> ""
+                Just errF  -> errF ++ " ();"
+            constType :: Integer -> Const
+            constType c' = case clockType clkData of
+                            Word8  -> CWord8  (fromInteger c' :: Word8)
+                            Word16 -> CWord16 (fromInteger c' :: Word16)
+                            Word32 -> CWord32 (fromInteger c' :: Word32)
+                            Word64 -> CWord64 (fromInteger c' :: Word64)
+                            _      -> clkTypeErr
 
-  phaseStartTime     = "__phase_start_time"
-  lastPhaseStartTime = "__last_phase_start_time"
+    -- generate header file code for the main .c module
+    h = unlines
+      [ "#include <stdbool.h>"
+      , "#include <stdint.h>"
+      , ""
+      , preHCode
+      , ""
+      , "void " ++ funcName ++ "();"
+      , ""
+      , declState False (StateHierarchy (cStateName config) [state])
+      , ""
+      , postHCode
+      ]
+
+    globalType = cType (case hardwareClock config of
+                          Nothing      -> Word64 -- Default type
+                          Just clkData -> case clockType clkData of
+                                            Word8  -> Word8
+                                            Word16 -> Word16
+                                            Word32 -> Word32
+                                            Word64 -> Word64
+                                            _      -> clkTypeErr)
+    clkTypeErr :: a
+    clkTypeErr = error "Clock type must be one of Word8, Word16, Word32, Word64."
+
+    funcName = if null (cFuncName config) then name else cFuncName config
+
+    rules' :: [Rule]
+    rules' = concat [ r | (_, _, r) <- schedule' ]
+
+    covLen = 1 + div (maximum $ map ruleId rules') 32
+
+    phaseStartTime     = "__phase_start_time"
+    lastPhaseStartTime = "__last_phase_start_time"
 
 
 -- | Optionally render the given code string
@@ -419,15 +446,26 @@ declState define a' = if isHierarchyEmpty a' then ""
      (if define then "" else "extern ") ++ init (init (f1 "" a'))
   ++ (if define then " =\n" ++ f2 "" a' else "") ++ ";\n"
   where
+  -- render the declaration section
+  -- i :: indentation string
+  -- a :: StateHierarchy
   f1 i a = case a of
     StateHierarchy name items ->
          i ++ "struct {  /* " ++ name ++ " */\n"
       ++ concatMap (f1 ("  " ++ i)) items ++ i ++ "} " ++ name ++ ";\n"
     StateVariable  name c     -> i ++ cType (E.typeOf c) ++ " " ++ name ++ ";\n"
     StateArray     name c     ->
-      i ++ cType (E.typeOf $ head c) ++ " " ++ name ++ "[" ++ show (length c) ++ "];\n"
-    StateChannel{} -> error "declState: StateChannel case not implemented"
+         i ++ cType (E.typeOf $ head c) ++ " " ++ name ++ "[" ++ show (length c)
+      ++ "];\n"
+    -- render channel value and channel ready flag declarations
+    StateChannel   name c _   ->
+         i ++ cType (E.typeOf c) ++ " " ++ channelPrefix ++ name ++ ";\n"
+      ++ i ++ cType Bool ++ " " ++ channelPrefix ++ name ++ channelReadySuffix
+      ++ ";\n"
 
+  -- render the initialization section
+  -- i :: indentation string
+  -- a :: StateHierarchy
   f2 i a = case a of
     StateHierarchy name items ->
          i ++ "{  /* " ++ name ++ " */\n"
@@ -436,49 +474,68 @@ declState define a' = if isHierarchyEmpty a' then ""
     StateArray     name c     ->
          i ++ "/* " ++ name ++ " */\n" ++ i ++ "{ "
       ++ intercalate ("\n" ++ i ++ ", ") (map showConst c) ++ "\n" ++ i ++ "}"
-    StateChannel{} -> error "declState: StateChannel case not implemented"
+    -- render channel value and channel ready flag initial values
+    StateChannel   name c f   ->
+         i ++ "/* " ++ name ++ " */  " ++ showConst c ++ ",\n"
+      ++ i ++ "/* " ++ name ++ channelReadySuffix ++ " */ " ++ showConst f
 
-  isHierarchyEmpty h = case h of
-    StateHierarchy _ i -> if null i then True else and $ map isHierarchyEmpty i
-    StateVariable _ _ -> False
-    StateArray _ _ -> False
-    StateChannel{} -> error "declState: StateChannel case not implemented"
+-- | Check if state hierarchy is empty
+isHierarchyEmpty :: StateHierarchy -> Bool
+isHierarchyEmpty h = case h of
+  StateHierarchy _ i   -> if null i then True
+                                    else and $ map isHierarchyEmpty i
+  StateVariable  _ _   -> False
+  StateArray     _ _   -> False
+  StateChannel   _ _ _ -> False
 
--- | Generate C code for a rule
+-- | Generate C code for a rule as a void/void function @__rN@, where @N@ is
+-- the internal rule ID.
 codeRule :: UeMap -> Config -> Rule -> String
-codeRule mp config rule@(Rule _ _ _ _ _ _ _) =
-  "/* " ++ show rule ++ " */\n" ++
-  "static void __r" ++ show (ruleId rule) ++ "() {\n" ++
-  concatMap (codeUE mp config ues "  ") ues ++
-  "  if (" ++ id' (ruleEnable rule) ++ ") {\n" ++
-  concatMap codeAction (ruleActions rule) ++
-  codeIf (cRuleCoverage config)
-         ( "    __coverage[" ++ covWord ++ "] = __coverage[" ++ covWord
-          ++ "] | (1 << " ++ covBit ++ ");\n")
-  ++ "  }\n" ++ concatMap codeAssign (ruleAssigns rule) ++ "}\n\n"
+codeRule mp config rule@(Rule{}) =
+    "/* " ++ show rule ++ " */\n" ++
+    "static void __r" ++ show (ruleId rule) ++ "() {\n" ++
+    concatMap (codeUE mp config ues "  ") ues ++
+    "  if (" ++ id' (ruleEnable rule) ++ ") {\n" ++
+    concatMap codeAction (ruleActions rule) ++
+    codeIf (cRuleCoverage config)
+           ( "    __coverage[" ++ covWord ++ "] = __coverage[" ++ covWord
+            ++ "] | (1 << " ++ covBit ++ ");\n")
+    ++ "  }\n" ++ concatMap codeAssign (ruleAssigns rule) ++ "}\n\n"
   where
-  ues = topo mp $ allUEs rule
-  id' ue' = fromJust $ lookup ue' ues
+    ues     = topo mp $ allUEs rule
+    id' ue' = fromJust $ lookup ue' ues
 
-  codeAction :: (([String] -> String), [Hash]) -> String
-  codeAction (f, args) = "    " ++ f (map id' args) ++ ";\n"
+    codeAction :: (([String] -> String), [Hash]) -> String
+    codeAction (f, args) = "    " ++ f (map id' args) ++ ";\n"
 
-  covWord = show $ div (ruleId rule) 32
-  covBit  = show $ mod (ruleId rule) 32
+    covWord = show $ div (ruleId rule) 32
+    covBit  = show $ mod (ruleId rule) 32
 
-  -- Generate C code for a variable assignment
-  codeAssign :: (MUV, Hash) -> String
-  codeAssign (uv', ue') = concat ["  ", lh, " = ", id' ue', ";\n"]
-    where
-    lh = case uv' of
-      MUV _ n _                     -> concat [cStateName config, ".", n]
-      MUVArray (UA _ n _)     index ->
-        concat [cStateName config, ".", n, "[", id' index, "]"]
-      MUVArray (UAExtern n _) index -> concat [n, "[", id' index, "]"]
-      MUVExtern n _                 -> n
+    -- Generate C code for a variable assignment
+    codeAssign :: (MUV, Hash) -> String
+    codeAssign (uv', ue') = concat ["  ", lh, " = ", id' ue', ";\n"]
+      where
+      lh = case uv' of
+        MUV _ n _                     -> concat [cStateName config, ".", n]
+        MUVArray (UA _ n _)     index ->
+          concat [cStateName config, ".", n, "[", id' index, "]"]
+        MUVArray (UAExtern n _) index -> concat [n, "[", id' index, "]"]
+        MUVExtern n _                 -> n
+        -- MUVChannel values are generated by the 'writeChannel' primitive
+        -- channel writes use special state struct name: __channel_<name>
+        MUVChannel _ n _              ->
+          concat [ cStateName config, ".", channelPrefix, n]
 
 -- Don't generate code for the 'Assert' or 'Cover' variants
 codeRule _ _ _ = ""
+
+-- | State struct name prefix for channel variables
+channelPrefix :: String
+channelPrefix = "__channel_"
+
+-- | State struct ready flag suffix for channels
+channelReadySuffix :: String
+channelReadySuffix = "_ready"
 
 -- | Global clock identifier
 globalClk :: String
@@ -486,7 +543,7 @@ globalClk = "__global_clock"
 
 -- | Generate C assertions for each Atom assertion
 codeAssertionChecks :: UeMap -> Config -> [Name] -> [Name] -> [Rule] -> String
-codeAssertionChecks mp config assertionNames coverageNames rules =
+codeAssertionChecks mp config assertNames coverNames rules =
   codeIf (cAssert config) $
   "static void __assertion_checks() {\n" ++
   concatMap (codeUE mp config ues "  ") ues ++
@@ -504,9 +561,9 @@ codeAssertionChecks mp config assertionNames coverageNames rules =
                   ++ concat [ [a, b] | Cover _ a b <- rules ]
   id' ue' = fromJust $ lookup ue' ues
   assertionId :: Name -> String
-  assertionId name = show $ fromJust $ elemIndex name assertionNames
+  assertionId name = show $ fromJust $ elemIndex name assertNames
   coverageId :: Name -> String
-  coverageId name = show $ fromJust $ elemIndex name coverageNames
+  coverageId name = show $ fromJust $ elemIndex name coverNames
 
 -- | Generate code that schedules calls to rules according to the given period
 -- and phase offset
