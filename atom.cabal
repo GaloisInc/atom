@@ -90,7 +90,6 @@ executable atom
     Parser.Lex
     Parser.Parse
   extensions:
-  ghc-options: -Wall -Werror -O2
 
   if flag(develop)
     ghc-options: -O0
