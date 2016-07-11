@@ -16,9 +16,9 @@ data TopDeclaration
 
 instance Locate TopDeclaration where
   locate a = case a of
-    Value' a -> locate a
-    Datatype a _ _ _ -> a
-    Typeclass a -> a
+    Value' x -> locate x
+    Datatype x _ _ _ -> x
+    Typeclass x -> x
 
 data Value = Value
   { loc       :: Location
@@ -47,16 +47,16 @@ data Expr
 
 instance Locate Expr     where
   locate a = case a of
-    LitUnit       a -> a
-    VarValue      a _ -> a
-    VarType       a _ -> a
-    Apply         a _ _ -> a
-    ApplyContract a _ _ -> a
-    Lambda        a _ _ -> a
-    Where         a _ _ -> a
-    Intrinsic     a _ -> a
-    If            a _ _ _ -> a
-    Case          a _ _ -> a
+    LitUnit       x -> x
+    VarValue      x _ -> x
+    VarType       x _ -> x
+    Apply         x _ _ -> x
+    ApplyContract x _ _ -> x
+    Lambda        x _ _ -> x
+    Where         x _ _ -> x
+    Intrinsic     x _ -> x
+    If            x _ _ _ -> x
+    Case          x _ _ -> x
     
 data Pattern
   = Wildcard     L
@@ -67,10 +67,10 @@ data Pattern
 
 instance Locate Pattern where
   locate a = case a of
-    Wildcard     a -> a
-    PatternVar   a _ -> a
-    PatternApply a _ _ -> a
-    As           a _ _ -> a
+    Wildcard     x -> x
+    PatternVar   x _ -> x
+    PatternApply x _ _ -> x
+    As           x _ _ -> x
 
 data Guard
   = Unguarded L Expr
@@ -80,7 +80,7 @@ data Guard
 
 instance Locate Guard where
   locate a = case a of
-    Unguarded a _ -> a
-    Guard     a _ _ -> a
-    Guard'    a _ _ _ -> a
+    Unguarded x _ -> x
+    Guard     x _ _ -> x
+    Guard'    x _ _ _ -> x
 
