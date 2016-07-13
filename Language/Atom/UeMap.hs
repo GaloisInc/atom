@@ -39,6 +39,7 @@ data MUV
   = MUV Int String Const
   | MUVArray UA Hash
   | MUVExtern String Type
+  | MUVChannel Int String Const
   deriving (Show, Eq, Ord)
 
 -- | Transforms a 'UV' into a 'MUV', returning the possibly updated map.
@@ -49,6 +50,7 @@ newUV u mp =
     UVExtern i j    -> (MUVExtern i j, mp)
     UVArray arr ue_ -> let (h,mp') = newUE ue_ mp in
                        (MUVArray arr h, mp')
+    UVChannel i j k -> (MUVChannel i j k, mp)
 
 -- | Corresponds to 'UE's --- the elements in the sharing structure.
 data UeElem
@@ -96,48 +98,49 @@ data UeElem
 
 typeOf :: Hash -> UeMap -> Type
 typeOf h mp = case getUE h mp of
-    MUVRef     (MUV _ _ a)     -> E.typeOf a
-    MUVRef     (MUVArray a _)  -> E.typeOf a
-    MUVRef     (MUVExtern _ t) -> t
-    MUCast     t _             -> t
-    MUConst    c               -> E.typeOf c
-    MUAdd      a _             -> typeOf' a
-    MUSub      a _             -> typeOf' a
-    MUMul      a _             -> typeOf' a
-    MUDiv      a _             -> typeOf' a
-    MUMod      a _             -> typeOf' a
-    MUNot      _               -> Bool
-    MUAnd      _               -> Bool
-    MUBWNot    a               -> typeOf' a
-    MUBWAnd    a _             -> typeOf' a
-    MUBWOr     a _             -> typeOf' a
-    MUBWXor    a _             -> typeOf' a
-    MUBWShiftL a _             -> typeOf' a
-    MUBWShiftR a _             -> typeOf' a
-    MUEq       _ _             -> Bool
-    MULt       _ _             -> Bool
-    MUMux      _ a _           -> typeOf' a
-    MUF2B      _               -> Word32
-    MUD2B      _               -> Word64
-    MUB2F      _               -> Float
-    MUB2D      _               -> Double
+    MUVRef     (MUV _ _ a)        -> E.typeOf a
+    MUVRef     (MUVArray a _)     -> E.typeOf a
+    MUVRef     (MUVExtern _ t)    -> t
+    MUVRef     (MUVChannel _ _ a) -> E.typeOf a
+    MUCast     t _                -> t
+    MUConst    c                  -> E.typeOf c
+    MUAdd      a _                -> typeOf' a
+    MUSub      a _                -> typeOf' a
+    MUMul      a _                -> typeOf' a
+    MUDiv      a _                -> typeOf' a
+    MUMod      a _                -> typeOf' a
+    MUNot      _                  -> Bool
+    MUAnd      _                  -> Bool
+    MUBWNot    a                  -> typeOf' a
+    MUBWAnd    a _                -> typeOf' a
+    MUBWOr     a _                -> typeOf' a
+    MUBWXor    a _                -> typeOf' a
+    MUBWShiftL a _                -> typeOf' a
+    MUBWShiftR a _                -> typeOf' a
+    MUEq       _ _                -> Bool
+    MULt       _ _                -> Bool
+    MUMux      _ a _              -> typeOf' a
+    MUF2B      _                  -> Word32
+    MUD2B      _                  -> Word64
+    MUB2F      _                  -> Float
+    MUB2D      _                  -> Double
 
     -- math.h:
-    MUPi                       -> Double
-    MUExp     a                -> typeOf' a
-    MULog     a                -> typeOf' a
-    MUSqrt    a                -> typeOf' a
-    MUPow     a _              -> typeOf' a
-    MUSin     a                -> typeOf' a
-    MUAsin    a                -> typeOf' a
-    MUCos     a                -> typeOf' a
-    MUAcos    a                -> typeOf' a
-    MUSinh    a                -> typeOf' a
-    MUCosh    a                -> typeOf' a
-    MUAsinh   a                -> typeOf' a
-    MUAcosh   a                -> typeOf' a
-    MUAtan    a                -> typeOf' a
-    MUAtanh   a                -> typeOf' a
+    MUPi                          -> Double
+    MUExp     a                   -> typeOf' a
+    MULog     a                   -> typeOf' a
+    MUSqrt    a                   -> typeOf' a
+    MUPow     a _                 -> typeOf' a
+    MUSin     a                   -> typeOf' a
+    MUAsin    a                   -> typeOf' a
+    MUCos     a                   -> typeOf' a
+    MUAcos    a                   -> typeOf' a
+    MUSinh    a                   -> typeOf' a
+    MUCosh    a                   -> typeOf' a
+    MUAsinh   a                   -> typeOf' a
+    MUAcosh   a                   -> typeOf' a
+    MUAtan    a                   -> typeOf' a
+    MUAtanh   a                   -> typeOf' a
   where
   typeOf' h' = typeOf h' mp
 
@@ -167,9 +170,10 @@ emptyMap = (0, M.empty)
 -- | Create the sharing map.
 share :: UE -> UeState Hash
 share e = case e of
-  UVRef     (UV i j k)      -> maybeUpdate (MUVRef $ MUV i j k)
-  UVRef     (UVExtern i j)  -> maybeUpdate (MUVRef $ MUVExtern i j)
-  UVRef     (UVArray arr a) -> unOp a (\x -> MUVRef (MUVArray arr x))
+  UVRef     (UV i j k)        -> maybeUpdate (MUVRef $ MUV i j k)
+  UVRef     (UVExtern i j)    -> maybeUpdate (MUVRef $ MUVExtern i j)
+  UVRef     (UVArray arr a)   -> unOp a (\x -> MUVRef (MUVArray arr x))
+  UVRef     (UVChannel i j k) -> maybeUpdate (MUVRef $ MUVChannel i j k)
   UConst    a     -> maybeUpdate (MUConst a)
   UCast     t a   -> unOp a (MUCast t)
   UAdd      a b   -> binOp (a,b) MUAdd
@@ -253,9 +257,10 @@ maybeUpdate e = do
 -- | Get a 'UE' back out of the 'UeMap'.
 recoverUE :: UeMap -> Hash -> UE
 recoverUE st h = case getUE h st of
-  MUVRef     (MUV i j k)     -> UVRef (UV i j k)
-  MUVRef     (MUVArray i a)  -> UVRef (UVArray i (recover' a))
-  MUVRef     (MUVExtern i j) -> UVRef (UVExtern i j)
+  MUVRef     (MUV i j k)        -> UVRef (UV i j k)
+  MUVRef     (MUVArray i a)     -> UVRef (UVArray i (recover' a))
+  MUVRef     (MUVExtern i j)    -> UVRef (UVExtern i j)
+  MUVRef     (MUVChannel i j k) -> UVRef (UVChannel i j k)
   MUCast     t a   -> UCast     t (recover' a)
   MUConst    a     -> UConst    a
   MUAdd      a b   -> UAdd      (recover' a) (recover' b)
@@ -303,6 +308,7 @@ ueUpstream h t = case getUE h t of
   MUVRef     (MUV _ _ _)     -> []
   MUVRef     (MUVArray _ a)  -> [a]
   MUVRef     (MUVExtern _ _) -> []
+  MUVRef     (MUVChannel{})  -> []
   MUCast     _ a             -> [a]
   MUConst    _               -> []
   MUAdd      a b             -> [a, b]

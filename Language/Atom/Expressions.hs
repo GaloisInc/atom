@@ -181,6 +181,7 @@ data UV
   = UV Int String Const  -- ^ untyped var: internal ID, name, initial value
   | UVArray UA UE        -- ^ untyped array: UA value, initial value expression
   | UVExtern String Type -- ^ external variable: name, type
+  | UVChannel Int String Const  -- ^ channel var: ID, name, init value
   deriving (Show, Eq, Ord, Data, Typeable)
 
 -- | A typed array.
@@ -336,9 +337,10 @@ instance TypeOf Const where
 
 instance TypeOf UV where
   typeOf a' = case a' of
-    UV _ _ a     -> typeOf a
-    UVArray a _  -> typeOf a
-    UVExtern _ t -> t
+    UV _ _ a        -> typeOf a
+    UVArray a _     -> typeOf a
+    UVExtern _ t    -> t
+    UVChannel _ _ a -> typeOf a
 
 instance TypeOf (V a) where
   typeOf (V uv') = typeOf uv'
