@@ -24,7 +24,7 @@ type Schedule = (UeMap, [(Int, Int, [Rule])])
 schedule :: [Rule] -> UeMap -> Schedule
 schedule rules' mp = (mp, concatMap spread periods)
   where
-  rules = [ r | r@(Rule _ _ _ _ _ _ _) <- rules' ]
+  rules = [ r | r@(Rule{}) <- rules' ]
 
   -- Algorithm for assigning rules to phases for a given period 
   -- (assuming they aren't given an exact phase):

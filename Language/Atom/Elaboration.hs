@@ -90,18 +90,22 @@ data AtomDB = AtomDB
   , atomActions     :: [([String] -> String, [Hash])]
   , atomAsserts     :: [(Name, Hash)]
   , atomCovers      :: [(Name, Hash)]
+  , atomChanListen  :: Maybe Name          -- ^ a channel ID to listen to
+  , atomChanWrite   :: Maybe (Name, Hash)  -- ^ a channel, expression pair for writes
   }
 
 -- XXX sum of records leads to partial record field functions
 data Rule
   = Rule
-    { ruleId        :: Int
-    , ruleName      :: Name
-    , ruleEnable    :: Hash
-    , ruleAssigns   :: [(MUV, Hash)]
-    , ruleActions   :: [([String] -> String, [Hash])]
-    , rulePeriod    :: Int
-    , rulePhase     :: Phase
+    { ruleId         :: Int
+    , ruleName       :: Name
+    , ruleEnable     :: Hash
+    , ruleAssigns    :: [(MUV, Hash)]
+    , ruleActions    :: [([String] -> String, [Hash])]
+    , rulePeriod     :: Int
+    , rulePhase      :: Phase
+    , ruleChanListen :: Maybe Name
+    , ruleChanWrite  :: Maybe (Name, Hash)
     }
   | Assert
     { ruleName      :: Name
@@ -150,13 +154,15 @@ elaborateRules parentEnable atom =
                                       return $ pr' : prs) []
                        (atomAssigns atom)
     return $ Rule
-      { ruleId        = atomId   atom
-      , ruleName      = atomName atom
-      , ruleEnable    = h
-      , ruleAssigns   = assigns
-      , ruleActions   = atomActions atom
-      , rulePeriod    = atomPeriod  atom
-      , rulePhase     = atomPhase   atom
+      { ruleId         = atomId   atom
+      , ruleName       = atomName atom
+      , ruleEnable     = h
+      , ruleAssigns    = assigns
+      , ruleActions    = atomActions atom
+      , rulePeriod     = atomPeriod  atom
+      , rulePhase      = atomPhase   atom
+      , ruleChanListen = atomChanListen atom
+      , ruleChanWrite  = atomChanWrite atom
       }
   assert :: (Name, Hash) -> UeState Rule
   assert (name, u) = do
@@ -202,25 +208,27 @@ elaborateRules parentEnable atom =
 reIdRules :: Int -> [Rule] -> [Rule]
 reIdRules _ [] = []
 reIdRules i (a:b) = case a of
-  Rule _ _ _ _ _ _ _ -> a { ruleId = i } : reIdRules (i + 1) b
-  _                  -> a                : reIdRules  i      b
+  Rule{} -> a { ruleId = i } : reIdRules (i + 1) b
+  _      -> a                : reIdRules  i      b
 
 buildAtom :: UeMap -> Global -> Name -> Atom a -> IO (a, AtomSt)
 buildAtom st g name (Atom f) = do
   let (h,st') = newUE (ubool True) st
   f (st', ( g { gRuleId = gRuleId g + 1 }
           , AtomDB
-              { atomId        = gRuleId g
-              , atomName      = name
-              , atomNames     = []
-              , atomEnable    = h
-              , atomSubs      = []
-              , atomPeriod    = gPeriod g
-              , atomPhase     = gPhase  g
-              , atomAssigns   = []
-              , atomActions   = []
-              , atomAsserts   = []
-              , atomCovers    = []
+              { atomId         = gRuleId g
+              , atomName       = name
+              , atomNames      = []
+              , atomEnable     = h
+              , atomSubs       = []
+              , atomPeriod     = gPeriod g
+              , atomPhase      = gPhase  g
+              , atomAssigns    = []
+              , atomActions    = []
+              , atomAsserts    = []
+              , atomCovers     = []
+              , atomChanListen = Nothing
+              , atomChanWrite  = Nothing
               }
           )
     )
@@ -317,7 +325,7 @@ checkEnable st rule
 -- | Check that a variable is assigned more than once in a rule.  Will
 -- eventually be replaced consistent assignment checking.
 checkAssignConflicts :: Rule -> IO Bool
-checkAssignConflicts rule@(Rule _ _ _ _ _ _ _) =
+checkAssignConflicts rule@(Rule{}) =
   if length vars /= length vars'
     then do
       putStrLn $ "ERROR: Rule "
