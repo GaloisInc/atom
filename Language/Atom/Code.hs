@@ -492,15 +492,33 @@ isHierarchyEmpty h = case h of
 -- the internal rule ID.
 codeRule :: UeMap -> Config -> Rule -> String
 codeRule mp config rule@(Rule{}) =
+    -- function decl
     "/* " ++ show rule ++ " */\n" ++
     "static void __r" ++ show (ruleId rule) ++ "() {\n" ++
+
+    -- declare local vars
     concatMap (codeUE mp config ues "  ") ues ++
+
+    -- check enable condition
     "  if (" ++ id' (ruleEnable rule) ++ ") {\n" ++
+
+    -- render all the rule actions
     concatMap codeAction (ruleActions rule) ++
+
+    -- render the rule coverage
     codeIf (cRuleCoverage config)
            ( "    __coverage[" ++ covWord ++ "] = __coverage[" ++ covWord
-            ++ "] | (1 << " ++ covBit ++ ");\n")
-    ++ "  }\n" ++ concatMap codeAssign (ruleAssigns rule) ++ "}\n\n"
+            ++ "] | (1 << " ++ covBit ++ ");\n") ++
+    "  }\n" ++
+
+    -- Render atom assignments
+    --
+    -- Note: these assignments should occur outside the if block above. They are
+    -- typically assignments whose RHS is an expression depending explicitly
+    -- on the enable flag.
+    concatMap codeAssign (ruleAssigns rule) ++
+
+    "}\n\n"
   where
     ues     = topo mp $ allUEs rule
     id' ue' = fromJust $ lookup ue' ues
@@ -511,7 +529,8 @@ codeRule mp config rule@(Rule{}) =
     covWord = show $ div (ruleId rule) 32
     covBit  = show $ mod (ruleId rule) 32
 
-    -- Generate C code for a variable assignment
+    -- Generate C code for effectfull actions: variable assignments, channel
+    -- reads/writes, etc.
     codeAssign :: (MUV, Hash) -> String
     codeAssign (uv', ue') = concat ["  ", lh, " = ", id' ue', ";\n"]
       where

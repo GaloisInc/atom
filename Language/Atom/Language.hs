@@ -130,12 +130,6 @@ phase' phType n atom' = do
             (st', (g', a')) <- get
             put (st', (g' { gPhase = gPhase g }, a'))
             return r
-    -- XXX
-    -- else do put (g { gPhase = n }, a)
-    --         r <- atom
-    --         (g', a) <- get
-    --         put (g' { gPhase = gPhase g }, a)
-    --         return r
 
 -- | Defines the earliest phase within the period at which the rule should
 -- execute; the scheduler attempt to find an optimal phase from 0 <= @n@ <
@@ -370,7 +364,8 @@ cover :: Name -> E Bool -> Atom ()
 cover name check = do
   (st, (g, atom')) <- get
   let names = fst $ unzip $ atomCovers atom'
-  when (elem name names) (liftIO $ putStrLn $ "WARNING: Coverage name already used: " ++ name)
+  when (elem name names)
+       (liftIO . putStrLn $ "WARNING: Coverage name already used: " ++ name)
   let (chk,st') = newUE (ue check) st
   put (st', (g, atom' { atomCovers = (name, chk) : atomCovers atom' }))
 
