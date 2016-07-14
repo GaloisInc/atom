@@ -42,7 +42,9 @@ module Language.Atom
     word16', word32, word32', word64, word64', float, float', double, double',
     action, call, probe, probes, assert, cover, assertImply, Name, liftIO,
     path, clock, nextCoverage,
-    channel, ChanInput (..), ChanOutput (..),
+    -- ** channels
+    channel, ChanInput (..), ChanOutput (..), writeChannel, readChannel,
+    condChannel,
     -- * Expressions
     -- | Module: "Language.Atom.Expressions"
     E(..), V(..), UE(..), UV(..), A(..), UA(..), Expr(..), Expression(..),
