@@ -95,12 +95,10 @@ writeChannel cin e = do
   let (h, st0) = newUE (ue e) st
   put (st0, (g, atom { atomChanWrite = Just (chanName cin, h) }))
 
--- | Read a message from a typed channel. This operation returns the last
--- message written (or the initial content).
-readChannel :: Expr a => ChanOutput -> Atom (E a)
-readChannel c = do
-  let e = VRef (V (chanVar c))
-  return e
+-- | Read a message from a typed channel. This function returns an expression
+-- representing the value of the last message written (or the initial content).
+readChannel :: Expr a => ChanOutput -> E a
+readChannel c = VRef (V (chanVar c))
 
 -- | Condition execution of an atom on the given channel containing an unread
 -- message.
