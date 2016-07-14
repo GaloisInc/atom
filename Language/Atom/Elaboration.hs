@@ -380,6 +380,8 @@ array' name t = A $ UAExtern  name t
 
 -- | Add a name to the AtomDB and check that it is unique, throws an exception
 -- if not.
+--
+-- Note: the name returned is prefixed with the state hierarchy selector.
 addName :: Name -> Atom Name
 addName name = do
   (st, (g, atom)) <- get
@@ -390,7 +392,7 @@ addName name = do
       put (st, (g, atom { atomNames = name : atomNames atom }))
       return $ atomName atom ++ "." ++ name
 
--- still accepts some misformed names, like "_.." or "_]["
+-- still accepts some malformed names, like "_.." or "_]["
 checkName :: Name -> Atom ()
 checkName name =
   if (\ x -> isAlpha x || x == '_') (head name) &&

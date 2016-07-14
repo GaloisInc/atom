@@ -7,6 +7,8 @@ module Language.Atom.Channel
   , writeChannel
   , readChannel
   , condChannel
+    -- * misc exports
+  , channelPrefix
   )
 where
 
@@ -24,14 +26,17 @@ channel :: Expr a
         -> a     -- ^ default value for the channel variable
         -> Atom (ChanInput, ChanOutput)
 channel name init' = do
-  name' <- addName name
+  -- add the __chanel_ prefix to the channel name before registering the name
+  -- to try to separate the channel and variable namespaces somewhat
+  let sName = channelPrefix ++ name
+  name' <- addName sName
   (st, (g, atom)) <- get
   let cin  = mkChanInput (gChannelId g) name' init'
       cout = mkChanOutput (gChannelId g) name' init'
       c    = constant init'
       f    = constant False
   put (st, ( g { gChannelId = gChannelId g + 1
-               , gState = gState g ++ [StateChannel name c f]
+               , gState = gState g ++ [StateChannel sName c f]
                }
            , atom
            )
@@ -77,6 +82,10 @@ instance HasChan ChanOutput where
   chanID   = coutID
   chanName = coutName
   chanInit = coutInit
+
+-- | State struct name prefix for channel variables
+channelPrefix :: String
+channelPrefix = "__channel_"
 
 -- | Construct a channel variable which, in the C code generation case, is a stand-in
 -- for part of the global state sructure (the part storing the channel
