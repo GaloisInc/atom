@@ -539,7 +539,8 @@ codeRule mp config rule@(Rule{}) =
     "}\n\n"
   where
     ues     = topo mp $ allUEs rule
-    id' ue' = fromJust $ lookup ue' ues
+    lkErr u = "in codeRule: failed to lookup untyped expr " ++ show u
+    id' ue' = fromMaybe (error $ lkErr ue') $ lookup ue' ues
 
     codeAction :: (([String] -> String), [Hash]) -> String
     codeAction (f, args) = "    " ++ f (map id' args) ++ ";\n"
