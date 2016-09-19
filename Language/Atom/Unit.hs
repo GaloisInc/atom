@@ -234,10 +234,10 @@ printProbe (str, ue_) = case typeOf ue_ of
   Word64 -> printIntegralE str (ruInt   :: E Word64)
   Double -> printFloatingE str (ruFloat :: E Double)
   Float  -> printFloatingE str (ruFloat :: E Float)
-  where ruInt :: IntegralE a => E a
-        ruInt = Retype ue_
-        ruFloat :: FloatingE a => E a
-        ruFloat = Retype ue_
+  where ruInt   :: E a
+        ruInt   =  Retype ue_
+        ruFloat :: E a
+        ruFloat =  Retype ue_
 
 class Expr a => Random a where
   random :: E a

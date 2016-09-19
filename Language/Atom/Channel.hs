@@ -106,7 +106,7 @@ writeChannel cin e = do
 
 -- | Read a message from a typed channel. This function returns an expression
 -- representing the value of the last message written (or the initial content).
-readChannel :: Expr a => ChanOutput -> E a
+readChannel :: ChanOutput -> E a
 readChannel c = VRef (V (chanVar c))
 
 -- | Condition execution of an atom on the given channel containing an unread

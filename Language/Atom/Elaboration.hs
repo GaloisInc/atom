@@ -375,7 +375,7 @@ array name init' = do
   return $ A ua
 
 -- | Generic external array declaration.
-array' :: Expr a => Name -> Type -> A a
+array' :: Name -> Type -> A a
 array' name t = A $ UAExtern  name t
 
 -- | Add a name to the AtomDB and check that it is unique, throws an exception
@@ -387,7 +387,8 @@ addName name = do
   (st, (g, atom)) <- get
   checkName name
   if elem name (atomNames atom)
-    then error $ "ERROR: Name \"" ++ name ++ "\" not unique in " ++ show atom ++ "."
+    then error $ unwords [ "ERROR: Name \"" ++ name ++ "\" not unique in"
+                         , show atom ++ "." ]
     else do
       put (st, (g, atom { atomNames = name : atomNames atom }))
       return $ atomName atom ++ "." ++ name

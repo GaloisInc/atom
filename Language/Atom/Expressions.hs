@@ -312,7 +312,7 @@ instance Width Type where
 
 instance Width Const           where width = width . typeOf
 instance Expr a => Width (E a) where width = width . typeOf
-instance Expr a => Width (V a) where width = width . typeOf
+instance Width (V a) where     width = width . typeOf
 instance Width UE              where width = width . typeOf
 instance Width UV              where width = width . typeOf
 
@@ -755,15 +755,15 @@ value = VRef
 -- | Conditional expression.  Note, both branches are evaluated!
 --
 -- > mux test onTrue onFalse
-mux :: Expr a => E Bool -> E a -> E a -> E a
+mux :: E Bool -> E a -> E a -> E a
 mux = Mux
 
 -- | Array index to variable.
-(!) :: (Expr a, IntegralE b) => A a -> E b -> V a
+(!) :: IntegralE b => A a -> E b -> V a
 (!) (A ua) = V . UVArray ua . ue
 
 -- | Array index to expression.
-(!.) :: (Expr a, IntegralE b) => A a -> E b -> E a
+(!.) :: IntegralE b => A a -> E b -> E a
 a !. i = value $ a ! i
 
 
