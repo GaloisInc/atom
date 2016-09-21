@@ -80,9 +80,12 @@ initialGlobal = Global
 data AtomDB = AtomDB
   { atomId          :: Int
   , atomName        :: Name
-  , atomNames       :: [Name]      -- ^ Names used at this level.
-  , atomEnable      :: Hash        -- ^ Enabling condition.
-  , atomSubs        :: [AtomDB]    -- ^ Sub atoms.
+    -- | Names used at this level.
+  , atomNames       :: [Name]
+    -- | Enabling condition.
+  , atomEnable      :: Hash
+    -- | Sub atoms.
+  , atomSubs        :: [AtomDB]
   , atomPeriod      :: Int
   , atomPhase       :: Phase
     -- | Sequence of (variable, shared expr) assignments arising from '<=='
@@ -90,8 +93,10 @@ data AtomDB = AtomDB
   , atomActions     :: [([String] -> String, [Hash])]
   , atomAsserts     :: [(Name, Hash)]
   , atomCovers      :: [(Name, Hash)]
-  , atomChanListen  :: Maybe Name          -- ^ a channel ID to listen to
-  , atomChanWrite   :: Maybe (Name, Hash)  -- ^ a channel, expression pair for writes
+    -- | a channel ID to listen to
+  , atomChanListen  :: Maybe Name
+    -- | a sequence of (channel, expression) pairs for writes
+  , atomChanWrite   :: [(Name, Hash)]
   }
 
 -- XXX sum of records leads to partial record field functions
@@ -105,7 +110,7 @@ data Rule
     , rulePeriod     :: Int
     , rulePhase      :: Phase
     , ruleChanListen :: Maybe Name
-    , ruleChanWrite  :: Maybe (Name, Hash)
+    , ruleChanWrite  :: [(Name, Hash)]
     }
   | Assert
     { ruleName      :: Name
@@ -228,7 +233,7 @@ buildAtom st g name (Atom f) = do
               , atomAsserts    = []
               , atomCovers     = []
               , atomChanListen = Nothing
-              , atomChanWrite  = Nothing
+              , atomChanWrite  = []
               }
           )
     )
@@ -426,6 +431,6 @@ allUEs rule = ruleEnable rule : ues
     Rule{} ->
          concat [ ue' : index uv' | (uv', ue') <- ruleAssigns rule ]
       ++ concat (snd (unzip (ruleActions rule)))
-      ++ maybe [] ((:[]).snd) (ruleChanWrite rule)
+      ++ map snd (ruleChanWrite rule)
     Assert _ _ a       -> [a]
     Cover  _ _ a       -> [a]

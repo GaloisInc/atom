@@ -87,8 +87,8 @@ instance HasChan ChanOutput where
 channelPrefix :: String
 channelPrefix = "__channel_"
 
--- | Construct a channel variable which, in the C code generation case, is a stand-in
--- for part of the global state sructure (the part storing the channel
+-- | Construct a channel variable which, in the C code generation case, is a
+-- stand-in for part of the global state sructure (the part storing the channel
 -- content).
 chanVar :: HasChan b => b -> UV
 chanVar c = UVChannel (chanID c) (chanName c) (chanInit c)
@@ -102,7 +102,8 @@ writeChannel :: Expr a => ChanInput -> E a -> Atom ()
 writeChannel cin e = do
   (st, (g, atom)) <- get
   let (h, st0) = newUE (ue e) st
-  put (st0, (g, atom { atomChanWrite = Just (chanName cin, h) }))
+  put (st0, (g, atom { atomChanWrite =  atomChanWrite atom
+                                     ++ [(chanName cin, h)] }))
 
 -- | Read a message from a typed channel. This function returns an expression
 -- representing the value of the last message written (or the initial content).

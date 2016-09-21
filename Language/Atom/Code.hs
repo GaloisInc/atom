@@ -490,6 +490,11 @@ isHierarchyEmpty h = case h of
 
 -- | Generate C code for a rule as a void/void function @__rN@, where @N@ is
 -- the internal rule ID.
+--
+-- TODO refactor in a pretty printer style; correct indentation level is a
+--      pain to keep track of
+-- TODO there is a bug here where some code actions get rendered in some
+--      contexts but not in others. (see atom-smp recv1 code vs. recv2 code)
 codeRule :: UeMap -> Config -> Rule -> String
 codeRule mp cfg rule@(Rule{}) =
     -- function decl
@@ -518,10 +523,11 @@ codeRule mp cfg rule@(Rule{}) =
             ++ "] | (1 << " ++ covBit ++ ");\n") ++
 
     -- render channel write
-    maybe
-      ""
-      (\(cname, h) -> "      " ++ stateChanVarCName cfg cname ++ " = " ++ id' h ++ ";\n"
-                   ++ "      " ++ stateChanReadyVarCName cfg cname ++ " = true;\n")
+    concatMap
+      (\(cname, h) -> "      " ++ stateChanVarCName cfg cname
+                               ++ " = " ++ id' h ++ ";\n"
+                   ++ "      " ++ stateChanReadyVarCName cfg cname
+                               ++ " = true;\n")
       (ruleChanWrite rule) ++
 
     -- END enable condition
