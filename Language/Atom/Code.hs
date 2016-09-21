@@ -548,7 +548,7 @@ codeRule mp cfg rule@(Rule{}) =
     id' ue' = fromMaybe (error $ lkErr ue') $ lookup ue' ues
 
     codeAction :: (([String] -> String), [Hash]) -> String
-    codeAction (f, args) = "    " ++ f (map id' args) ++ ";\n"
+    codeAction (f, args) = "      " ++ f (map id' args) ++ ";\n"
 
     covWord = show $ div (ruleId rule) 32
     covBit  = show $ mod (ruleId rule) 32
