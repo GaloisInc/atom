@@ -1,4 +1,4 @@
--- | 
+-- |
 -- Module: Scheduling
 -- Description: Rule scheduling
 -- Copyright: (c) 2013 Tom Hawkins & Lee Pike
@@ -26,7 +26,7 @@ schedule rules' mp = (mp, concatMap spread periods)
   where
   rules = [ r | r@(Rule{}) <- rules' ]
 
-  -- Algorithm for assigning rules to phases for a given period 
+  -- Algorithm for assigning rules to phases for a given period
   -- (assuming they aren't given an exact phase):
 
     -- 1. List the rules by their offsets, highest first.
@@ -40,7 +40,7 @@ schedule rules' mp = (mp, concatMap spread periods)
 
     -- 4. Go to (2).
 
-  -- Algorithm properties: for each period, 
+  -- Algorithm properties: for each period,
 
     -- A. Each rule is scheduled no earlier than its offset.
 
@@ -50,9 +50,9 @@ schedule rules' mp = (mp, concatMap spread periods)
     -- XXX Check if this is true.
     -- C. The sum of the difference between between each rule's offset and it's
     -- scheduled phase is the minimum of all schedules satisfying (A) and (B).
-    
+
   spread :: (Int, [Rule]) -> [(Int, Int, [Rule])]
-  spread (period, rules_) = 
+  spread (period, rules_) =
     placeRules (placeExactRules (replicate period []) exactRules)
                orderedByPhase
     where
@@ -74,9 +74,9 @@ schedule rules' mp = (mp, concatMap spread periods)
     -- lists according to the algorithm, and then filter out the phase-lists
     -- with no rules.
     placeRules :: [[Rule]] -> [Rule] -> [(Int, Int, [Rule])]
-    placeRules ls [] = filter (\(_,_,rls) -> not (null rls)) 
+    placeRules ls [] = filter (\(_,_,rls) -> not (null rls))
                               (zip3 (repeat period) [0..(period-1)] ls)
-    placeRules ls (r:rst) = placeRules (insertAt (lub r ls) r ls) rst 
+    placeRules ls (r:rst) = placeRules (insertAt (lub r ls) r ls) rst
 
     lub :: Rule -> [[Rule]] -> Int
     lub r ls = let minI = getPh r
