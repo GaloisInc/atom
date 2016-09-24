@@ -1,4 +1,4 @@
--- | 
+-- |
 -- Module: Compile
 -- Description: Compilation functions
 -- Copyright: (c) 2013 Tom Hawkins & Lee Pike
@@ -22,19 +22,27 @@ import Language.Atom.UeMap (emptyMap)
 import Language.Atom.Language hiding (Atom)
 
 -- | Compiles an atom description to C.
-compile :: Name -> Config -> Atom () 
-           -> IO (Schedule, RuleCoverage, [Name], [Name], [(Name, Type)])
+compile :: Name
+        -> Config
+        -> Atom ()
+        -> IO ( Schedule, RuleCoverage
+              , [Name]         {- assert names -}
+              , [Name]         {- coverage names -}
+              , [(Name, Type)] {- probe names/types -}
+              )
 compile name config atom' = do
   res <- elaborate emptyMap name atom'
   case res of
    Nothing -> putStrLn "ERROR: Design rule checks failed." >>
               exitWith (ExitFailure 1)
-   Just (st,(state, rules, assertionNames, coverageNames, probeNames)) -> do
-     let schedule' = schedule rules st
-     ruleCoverage <- writeC name config state rules schedule' assertionNames
+   Just (umap, (state, rules, assertionNames, coverageNames, probeNames)) -> do
+     -- main code generation step
+     let sch = schedule rules umap
+     ruleCoverage <- writeC name config state rules sch assertionNames
                      coverageNames probeNames
+
      when (isJust $ hardwareClock config) (putStrLn hwClockWarning)
-     return (schedule', ruleCoverage, assertionNames, coverageNames, probeNames)
+     return (sch, ruleCoverage, assertionNames, coverageNames, probeNames)
 
 hwClockWarning :: String
 hwClockWarning = unlines
