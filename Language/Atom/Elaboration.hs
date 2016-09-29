@@ -5,7 +5,6 @@
 
 module Language.Atom.Elaboration
   (
---    UeStateT
   -- * Atom monad and container.
     Atom
   , AtomDB     (..)
@@ -28,6 +27,7 @@ module Language.Atom.Elaboration
   , put
   , allUVs
   , allUEs
+  , isHierarchyEmpty
   ) where
 
 import Control.Monad (ap)
@@ -137,78 +137,89 @@ instance Show Rule   where show = ruleName
 
 elaborateRules:: Hash -> AtomDB -> UeState [Rule]
 elaborateRules parentEnable atom =
-  if isRule
-    then do r <- rule
-            rs <- rules
-            return $ r : rs
-    else rules
+    if isRule then do r  <- rule
+                      rs <- rules
+                      return $ r : rs
+               else rules
   where
-  isRule = not $ null (atomAssigns atom) && null (atomActions atom)
-  enable :: UeState Hash
-  enable = do
-    st <- S.get
-    let (h,st') = newUE (uand (recoverUE st parentEnable)
-                              (recoverUE st (atomEnable atom)))
-                         st
-    S.put st'
-    return h
-  rule :: UeState Rule
-  rule = do
-    h <- enable
-    assigns <- S.foldM (\prs pr -> do pr' <- enableAssign pr
-                                      return $ pr' : prs) []
-                       (atomAssigns atom)
-    return $ Rule
-      { ruleId         = atomId   atom
-      , ruleName       = atomName atom
-      , ruleEnable     = h
-      , ruleAssigns    = assigns
-      , ruleActions    = atomActions atom
-      , rulePeriod     = atomPeriod  atom
-      , rulePhase      = atomPhase   atom
-      , ruleChanListen = atomChanListen atom
-      , ruleChanWrite  = atomChanWrite atom
-      }
-  assert :: (Name, Hash) -> UeState Rule
-  assert (name, u) = do
-    h <- enable
-    return $ Assert
-      { ruleName      = name
-      , ruleEnable    = h
-      , ruleAssert    = u
-      }
-  cover :: (Name, Hash) -> UeState Rule
-  cover (name, u) = do
-    h <- enable
-    return $ Cover
-      { ruleName      = name
-      , ruleEnable    = h
-      , ruleCover     = u
-      }
-  rules :: UeState [Rule]
-  rules = do
-    asserts <- S.foldM (\rs e -> do r <- assert e
-                                    return $ r:rs
-                       ) [] (atomAsserts atom)
-    covers  <- S.foldM (\rs e -> do r <- cover e
-                                    return $ r:rs
-                       ) [] (atomCovers atom)
-    rules'  <- S.foldM (\rs db -> do en <- enable
-                                     r <- elaborateRules en db
-                                     return $ r:rs
-                       ) [] (atomSubs atom)
-    return $ asserts ++ covers ++ concat rules'
-  enableAssign :: (MUV, Hash) -> UeState (MUV, Hash)
-  enableAssign (uv', ue') = do
-    e <- enable
-    h <- maybeUpdate (MUVRef uv')
-    st <- S.get
-    let (h',st') = newUE (umux (recoverUE st e)
-                               (recoverUE st ue')
-                               (recoverUE st h))
-                         st
-    S.put st'
-    return (uv', h')
+    -- are there either assignments or actions to be done?
+    isRule = not $ null (atomAssigns atom) && null (atomActions atom)
+
+    -- combine the parent enable and the child enable conditions
+    enable :: UeState Hash
+    enable = do
+      st <- S.get
+      let (h,st') = newUE (uand (recoverUE st parentEnable)
+                                (recoverUE st (atomEnable atom)))
+                           st
+      S.put st'
+      return h
+
+    -- creat a 'Rule' from the 'AtomDB' and enable condition
+    rule :: UeState Rule
+    rule = do
+      h <- enable
+      assigns <- S.foldM (\prs pr -> do pr' <- enableAssign pr
+                                        return $ pr' : prs) []
+                         (atomAssigns atom)
+      return $ Rule
+        { ruleId         = atomId   atom
+        , ruleName       = atomName atom
+        , ruleEnable     = h
+        , ruleAssigns    = assigns
+        , ruleActions    = atomActions atom
+        , rulePeriod     = atomPeriod  atom
+        , rulePhase      = atomPhase   atom
+        , ruleChanListen = atomChanListen atom
+        , ruleChanWrite  = atomChanWrite atom
+        }
+
+    assert :: (Name, Hash) -> UeState Rule
+    assert (name, u) = do
+      h <- enable
+      return $ Assert
+        { ruleName      = name
+        , ruleEnable    = h
+        , ruleAssert    = u
+        }
+
+    cover :: (Name, Hash) -> UeState Rule
+    cover (name, u) = do
+      h <- enable
+      return $ Cover
+        { ruleName      = name
+        , ruleEnable    = h
+        , ruleCover     = u
+        }
+
+    -- essentially maps 'ellaborateRules' over the asserts, covers, and
+    -- subatoms in the given 'AtomDB'
+    rules :: UeState [Rule]
+    rules = do
+      asserts <- S.foldM (\rs e -> do r <- assert e
+                                      return $ r:rs
+                         ) [] (atomAsserts atom)
+      covers  <- S.foldM (\rs e -> do r <- cover e
+                                      return $ r:rs
+                         ) [] (atomCovers atom)
+      rules'  <- S.foldM (\rs db -> do en <- enable
+                                       r <- elaborateRules en db
+                                       return $ r:rs
+                         ) [] (atomSubs atom)
+      return $ asserts ++ covers ++ concat rules'
+
+    -- push the enable condition into each assignment. In the code generator
+    -- this results in assignments like @uint64_t __6 = __0 ? __5 : __3;@
+    -- where @__0@ is the 'enable' condition.
+    enableAssign :: (MUV, Hash) -> UeState (MUV, Hash)
+    enableAssign (uv', ue') = do
+      e <- enable
+      h <- maybeUpdate (MUVRef uv')
+      st <- S.get
+      let muxe     = umux (recoverUE st e) (recoverUE st ue') (recoverUE st h)
+          (h',st') = newUE muxe st
+      S.put st'
+      return (uv', h')
 
 reIdRules :: Int -> [Rule] -> [Rule]
 reIdRules _ [] = []
@@ -273,7 +284,8 @@ put :: AtomSt -> Atom ()
 put s = Atom (\ _ -> return ((), s))
 
 
--- | Given a top level name and design, elaborates design and returns a design database.
+-- | Given a top level name and design, elaborates design and returns a design
+-- database.
 --
 -- XXX elaborate is a bit hacky since we're threading state through this
 -- function, but I don't want to go change all the UeState monads to UeStateT
@@ -282,7 +294,7 @@ put s = Atom (\ _ -> return ((), s))
 elaborate :: UeMap -> Name -> Atom ()
           -> IO (Maybe ( UeMap
                        , (  StateHierarchy, [Rule], [Name], [Name]
-                          , [(Name, Type)])
+                         , [(Name, Type)])
                        ))
 elaborate st name atom = do
   (_, (st0, (g, atomDB))) <- buildAtom st initialGlobal name atom
@@ -311,14 +323,23 @@ elaborate st name atom = do
                  else Nothing
 
 trimState :: StateHierarchy -> StateHierarchy
-trimState a = case a of
-  StateHierarchy name items ->
-    StateHierarchy name (filter f . map trimState $ items)
-  a' -> a'
+trimState a =
+    case a of
+      StateHierarchy name items ->
+        StateHierarchy name (filter f . map trimState $ items)
+      a' -> a'
   where
-  f (StateHierarchy _ []) = False
-  f _ = True
+    f (StateHierarchy _ []) = False
+    f _ = True
 
+-- | Check if state hierarchy is empty
+isHierarchyEmpty :: StateHierarchy -> Bool
+isHierarchyEmpty h = case h of
+  StateHierarchy _ i   -> if null i then True
+                                    else and $ map isHierarchyEmpty i
+  StateVariable  _ _   -> False
+  StateArray     _ _   -> False
+  StateChannel   _ _ _ -> False
 
 -- | Checks that a rule will not be trivially disabled.
 checkEnable :: UeMap -> Rule -> IO ()

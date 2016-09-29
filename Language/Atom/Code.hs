@@ -210,7 +210,7 @@ writeC
   -> Config          -- ^ code gen configuration parameters
   -> StateHierarchy  -- ^ representation of the global state struct
   -> [Rule]          -- ^ list of atom rules to generate code for
-  -> Schedule        -- ^ pre-computed execution schedule
+  -> Schedule        -- ^ pre-computed execution schedule; includes UeMap
   -> [Name]          -- ^ assertion names
   -> [Name]          -- ^ coverage names
   -> [(Name, Type)]  -- ^ probe name, type pairs
@@ -478,15 +478,6 @@ declState define a' = if isHierarchyEmpty a' then ""
     StateChannel   name c f   ->
          i ++ "/* " ++ chanVarCName name ++ " */  " ++ showConst c ++ ",\n"
       ++ i ++ "/* " ++ chanReadyVarCName name ++ " */ " ++ showConst f
-
--- | Check if state hierarchy is empty
-isHierarchyEmpty :: StateHierarchy -> Bool
-isHierarchyEmpty h = case h of
-  StateHierarchy _ i   -> if null i then True
-                                    else and $ map isHierarchyEmpty i
-  StateVariable  _ _   -> False
-  StateArray     _ _   -> False
-  StateChannel   _ _ _ -> False
 
 -- | Generate C code for a rule as a void/void function @__rN@, where @N@ is
 -- the internal rule ID.
