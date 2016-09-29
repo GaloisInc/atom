@@ -1,4 +1,4 @@
--- | 
+-- |
 -- Module: Code
 -- Description: C code configuration and generation
 -- Copyright: (c) 2013 Tom Hawkins & Lee Pike
