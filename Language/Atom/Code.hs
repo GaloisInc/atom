@@ -15,6 +15,7 @@ module Language.Atom.Code
   , RuleCoverage
   ) where
 
+import Control.Arrow (second)
 import Data.List
 import Data.Maybe
 import Text.Printf
@@ -540,7 +541,7 @@ codeRule mp cfg rule@(Rule{}) =
     -- END rule function
     "}\n\n"
   where
-    ues     = topo mp $ allUEs rule
+    ues     = map (second showTopo) . topo mp $ allUEs rule
     lkErr u = "in codeRule: failed to lookup untyped expr " ++ show u
     id' ue' = fromMaybe (error $ lkErr ue') $ lookup ue' ues
 
@@ -605,8 +606,8 @@ codeAssertionChecks mp config assertNames coverNames rules =
           | Cover  name enable check <- rules ] ++
   "}\n\n"
   where
-  ues = topo mp $    concat [ [a, b] | Assert _ a b <- rules ]
-                  ++ concat [ [a, b] | Cover _ a b <- rules ]
+  ues = map (second showTopo) . topo mp $ concat [ [a, b] | Assert _ a b <- rules ]
+                                       ++ concat [ [a, b] | Cover _ a b <- rules ]
   id' ue' = fromJust $ lookup ue' ues
   assertionId :: Name -> String
   assertionId name = show $ fromJust $ elemIndex name assertNames
@@ -634,3 +635,7 @@ codePeriodPhase config (period, phase, rules) = unlines
              | otherwise                   = Word32
   callRule r = concat ["      ", codeIf (cAssert config) "__assertion_checks(); ", "__r", show (ruleId r), "();  /* ", show r, " */"]
 
+-- | Turn topological order on the hash map elements into ordered identifiers
+-- in C.
+showTopo :: Int -> String
+showTopo i = "__" ++ show i

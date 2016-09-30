@@ -1,4 +1,4 @@
--- | 
+-- |
 -- Module: UeMap
 -- Description: Sharing for UEs, based on IntMaps.
 -- Copyright: (c) 2013 Tom Hawkins & Lee Pike
@@ -34,12 +34,12 @@ import qualified Language.Atom.Expressions as E
 
 type Hash = Int
 
--- | Untyped variables map.
+-- | Keys corresponding to untyped variables in the UeMap.
 data MUV
-  = MUV Int String Const
+  = MUV Int String Const         -- ^ internal ID, name, initial value
   | MUVArray UA Hash
-  | MUVExtern String Type
-  | MUVChannel Int String Const
+  | MUVExtern String Type        -- ^ external name, type
+  | MUVChannel Int String Const  -- ^ internal ID, channel name, initial value
   deriving (Show, Eq, Ord)
 
 -- | Transforms a 'UV' into a 'MUV', returning the possibly updated map.
@@ -150,10 +150,10 @@ type UeMap = (Hash, M.Bimap Int UeElem)
 -- | Wrapped in the State Monad.
 type UeState a = State UeMap a
 
--- | Get the element associated with a 'Hash' value.  It's an error if the
--- element is not in the map.
+-- | Get the element associated with a 'Hash' value.  It's a runtime error if
+-- the element is not in the map.
 getUE :: Hash -> UeMap -> UeElem
-getUE h (_,mp) =
+getUE h (_, mp) =
   case M.lookup h mp of
     Nothing -> error $ "Error looking up hash " ++ show h
                     ++ " in the UE map\n" ++ show mp
