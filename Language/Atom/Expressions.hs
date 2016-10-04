@@ -178,9 +178,9 @@ data V a = V UV deriving Eq
 
 -- | Untyped variables.
 data UV
-  = UV Int String Const  -- ^ untyped var: internal ID, name, initial value
-  | UVArray UA UE        -- ^ untyped array: UA value, initial value expression
-  | UVExtern String Type -- ^ external variable: name, type
+  = UV Int String Const         -- ^ untyped var: internal ID, name, initial value
+  | UVArray UA UE               -- ^ untyped array: UA value, initial value expression
+  | UVExtern String Type        -- ^ external variable: name, type
   | UVChannel Int String Const  -- ^ channel var: ID, name, init value
   deriving (Show, Eq, Ord, Data, Typeable)
 
