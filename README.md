@@ -1,5 +1,16 @@
-Atom: An EDSL for Embedded Hard Realtime Applications
-====
+# Atom
+
+**This is a FORK of the original Atom project**
+
+This new version of Atom is *work in progress*. The main goal is to support
+generating transition system models from Atom specifications, for use in model
+checking.
+
+Below is the contents of the original README.md.
+
+-----
+
+# Atom: An EDSL for Embedded Hard Realtime Applications
 
 Atom is a Haskell EDSL for designing hard realtime embedded software. Based on guarded atomic actions (similar to STM), Atom enables highly concurrent programming without the need for mutex locking. In addition, Atom performs compile-time task scheduling and generates code with deterministic execution time and constant memory use, simplifying the process of timing verification and memory consumption in hard realtime applications. Without mutex locking and run-time task scheduling, Atom eliminates the need and overhead of RTOSes for many embedded applications.
 
