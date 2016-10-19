@@ -1,5 +1,7 @@
 # Atom
 
+[![Build Status](https://travis-ci.org/GaloisInc/atom.svg?branch=master)](https://travis-ci.org/GaloisInc/atom)
+
 **This is a FORK of the original Atom project**
 
 This new version of Atom is *work in progress*. The main goal is to support
