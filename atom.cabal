@@ -71,10 +71,7 @@ library
 
     other-extensions: GADTs, DeriveDataTypeable
 
-    ghc-options: -Wall -Werror -O2
-
-    if flag(develop)
-      ghc-options: -O0
+    ghc-options: -Wall
 
 executable atom
   default-language: Haskell2010
@@ -91,10 +88,7 @@ executable atom
     Parser.Parse
   extensions:
 
-  if flag(develop)
-    ghc-options: -O0
-
 source-repository head
     type:     git
-    location: git://github.com/tomahawkins/atom.git
+    location: git://github.com/GaloisInc/atom.git
 
