@@ -128,18 +128,17 @@ runTest seed test' = do
                         , cRuleCoverage = False }
   putStrLn $ "running test " ++ name test ++ " ..."
   hFlush stdout
-  (_, _, _, coverageNames, _) <-
-    compile "atom_unit_test" config $ testbench test
+  r <- compile "atom_unit_test" config $ testbench test
   (exit, out, err) <- readProcessWithExitCode "gcc"
                       (["-Wall", "-g", "-o", "atom_unit_test"] ++
                        [ "-I" ++ i | i <- includes test ] ++
                        modules test ++
                        ["atom_unit_test.c"]) ""
   let file = name test ++ ".log"
-  case exit of 
+  case exit of
     ExitFailure _ -> do
       writeFile file $ out ++ err
-      return (name test, False, 0, coverageNames, [])
+      return (name test, False, 0, compCoverNames r, [])
     ExitSuccess -> do
       log_ <- readProcess "./atom_unit_test" [] ""
       let pass = not $ elem "FAILURE:" $ words log_
@@ -147,9 +146,9 @@ runTest seed test' = do
                       line <- lines log_, isPrefixOf "covered:" line ]
       writeFile file $ out ++ err ++ log_
       hFlush stdout
-      return (name test, pass, cycles test, coverageNames, covered)
+      return (name test, pass, cycles test, compCoverNames r, covered)
   where
-  prePostCode test assertionNames coverageNames _ = (preCode, postCode)
+  prePostCode test assertionNames coverNames _ = (preCode, postCode)
     where
     preCode = unlines
       [ "#include <stdio.h>"
@@ -169,14 +168,14 @@ runTest seed test' = do
       , "}"
       , "void cover  (int id, unsigned char check, unsigned long long clock) {"
       , "  static unsigned char covered[" ++
-        show (length coverageNames) ++ "] = {" ++
-        intercalate "," (replicate (length coverageNames) "0") ++ "};"
+        show (length coverNames) ++ "] = {" ++
+        intercalate "," (replicate (length coverNames) "0") ++ "};"
       , "  if (check) {"
       , "    " ++ intercalate "\n    else "
         [ "if (id == " ++ show id ++
           ") { if (! covered[id]) { printf(\"covered: " ++ name' ++
           " at time %lli\\n\", clock); covered[id] = 1; } }" |
-          (name', id) <- zip coverageNames [0::Int ..] ]
+          (name', id) <- zip coverNames [0::Int ..] ]
       , "  }"
       , "}"
       ] ++ declCode test

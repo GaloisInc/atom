@@ -1,8 +1,20 @@
+-- |
+-- Module      :  Language.Atom.Channel
+-- Copyright   :  Galois Inc. 2016
+-- License     :  BSD3
+--
+-- Maintainer  :  bjones@galois.com
+-- Stability   :  experimental
+-- Portability :  unknown
+--
+-- First class channels for atom-atom communication. The intention is that
+-- channels and operations on them may be translated differently depending on
+-- the target. For example in the C code generator they are translated into
+-- pairs of (value, ready flag) variables.
+--
 module Language.Atom.Channel
   ( -- * Channel Declarations
     channel
-  , ChanInput (..)
-  , ChanOutput (..)
     -- * Channel operations
   , writeChannel
   , readChannel
@@ -12,7 +24,8 @@ module Language.Atom.Channel
   )
 where
 
-
+import Language.Atom.Types
+import Language.Atom.Channel.Types
 import Language.Atom.Elaboration
 import Language.Atom.Expressions
 import Language.Atom.UeMap (newUE)
@@ -21,67 +34,24 @@ import Language.Atom.UeMap (newUE)
 -- Channel Declarations ------------------------------------------------
 
 -- | Declare a typed channel. Returns channel input/output handles.
-channel :: Expr a
-        => Name  -- ^ channel name
-        -> a     -- ^ default value for the channel variable
+channel :: Name  -- ^ channel name
+        -> Type  -- ^ type of values in the channel
         -> Atom (ChanInput, ChanOutput)
-channel name init' = do
+channel name t = do
   -- add the __chanel_ prefix to the channel name before registering the name
   -- to try to separate the channel and variable namespaces somewhat
   let sName = channelPrefix ++ name
   name' <- addName sName
   (st, (g, atom)) <- get
-  let cin  = mkChanInput (gChannelId g) name' init'
-      cout = mkChanOutput (gChannelId g) name' init'
-      c    = constant init'
-      f    = constant False
+  let cin  = mkChanInput (gChannelId g) name' t
+      cout = mkChanOutput (gChannelId g) name' t
   put (st, ( g { gChannelId = gChannelId g + 1
-               , gState = gState g ++ [StateChannel sName c f]
+               , gState = gState g ++ [StateChannel sName t]
                }
            , atom
            )
       )
   return (cin, cout)
-
--- | Input side of a typed channel
-data ChanInput = ChanInput
-  { cinID   :: Int
-  , cinName :: Name
-  , cinInit :: Const
-  }
-  deriving (Eq, Show)
-
-mkChanInput :: Expr a => Int -> Name -> a -> ChanInput
-mkChanInput i n c = ChanInput i n (constant c)
-
--- | Output side of a typed channel
-data ChanOutput = ChanOutput
-  { coutID   :: Int
-  , coutName :: Name
-  , coutInit :: Const
-  }
-  deriving (Eq, Show)
-
-mkChanOutput :: Expr a => Int -> Name -> a -> ChanOutput
-mkChanOutput i n c = ChanOutput i n (constant c)
-
-
--- Channel Operations --------------------------------------------------
-
-class HasChan b where
-  chanID   :: b -> Int
-  chanName :: b -> Name
-  chanInit :: b -> Const
-
-instance HasChan ChanInput where
-  chanID   = cinID
-  chanName = cinName
-  chanInit = cinInit
-
-instance HasChan ChanOutput where
-  chanID   = coutID
-  chanName = coutName
-  chanInit = coutInit
 
 -- | State struct name prefix for channel variables
 channelPrefix :: String
@@ -91,7 +61,12 @@ channelPrefix = "__channel_"
 -- stand-in for part of the global state sructure (the part storing the channel
 -- content).
 chanVar :: HasChan b => b -> UV
-chanVar c = UVChannel (chanID c) (chanName c) (chanInit c)
+chanVar c = UVChannel (chanID c) (chanName c) (chanType c)
+
+-- | Not exported. Use condChannel instead to condition execution of an Atom
+-- on the readiness of a channel.
+readyVar :: HasChan b => b -> UV
+readyVar c = UVChannelReady (chanID c) (chanName c)
 
 -- | Write a message to a typed channel. The write operation happens once
 -- (i.e. the last writeChannel in the sequence is used) after the assignment
@@ -102,18 +77,24 @@ writeChannel :: Expr a => ChanInput -> E a -> Atom ()
 writeChannel cin e = do
   (st, (g, atom)) <- get
   let (h, st0) = newUE (ue e) st
-  put (st0, (g, atom { atomChanWrite =  atomChanWrite atom
-                                     ++ [(chanName cin, h)] }))
+  put (st0, (g, atom { atomChanWrite = atomChanWrite atom
+                                    ++ [(chanName cin, h)] }))
 
 -- | Read a message from a typed channel. This function returns an expression
 -- representing the value of the last message written (or the initial content).
 readChannel :: ChanOutput -> E a
-readChannel c = VRef (V (chanVar c))
+readChannel = VRef . V . chanVar
+
+readyChannel :: ChanOutput -> E Bool
+readyChannel = VRef . V . readyVar
 
 -- | Condition execution of an atom on the given channel containing an unread
 -- message.
-condChannel :: ChanOutput -> Atom ()
+condChannel :: ChanOutput -> Atom (E Bool)
 condChannel c = do
-  -- TODO implement modify or switch Atom to use regular State monad
   (st, (g, atom)) <- get
-  put (st, (g, atom { atomChanListen = Just (chanName c) }))
+  let e        = readyChannel c
+      (h, st0) = newUE (ue e) st
+  put (st0, (g, atom { atomChanListen =  atomChanListen atom
+                                     ++ [(chanName c, h)] }))
+  return $ readyChannel c

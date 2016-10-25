@@ -15,8 +15,8 @@ import Language.Atom
 main :: IO ()
 main = do
   let atomCfg = defaults { cCode = prePostCode , cRuleCoverage = False }
-  (sched, _, _, _, _) <- compile "extern_example" atomCfg extern
-  putStrLn $ reportSchedule sched
+  r <- compile "extern_example" atomCfg extern
+  putStrLn $ reportSchedule (compSchedule r)
 
 -- | Top-level rule
 extern :: Atom ()

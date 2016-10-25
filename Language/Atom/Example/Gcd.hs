@@ -14,8 +14,8 @@ import Language.Atom
 -- | Invoke the Atom compiler
 compileExample :: IO ()
 compileExample = do
-  (schedule, _, _, _, _) <- compile "example" defaults { cCode = prePostCode } example
-  putStrLn $ reportSchedule schedule
+  r <- compile "example" defaults { cCode = prePostCode } example
+  putStrLn $ reportSchedule (compSchedule r)
 
 prePostCode :: [Name] -> [Name] -> [(Name, Type)] -> (String, String)
 prePostCode _ _ _ =

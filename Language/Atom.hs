@@ -20,7 +20,7 @@ module Language.Atom
     Config (..), defaults, Clock (..), defaultClock, writeC, cType, RuleCoverage,
     -- * Compilation
     -- | Module: "Language.Atom.Compile"
-    compile, reportSchedule, Schedule,
+    compile, CompileResult(..), reportSchedule, Schedule,
     -- * Common
     -- | Module: "Language.Atom.Common"
     Timer, timer, startTimer, startTimerIf, timerDone, oneShotRise,

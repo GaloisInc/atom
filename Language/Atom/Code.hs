@@ -28,6 +28,7 @@ import Language.Atom.Expressions hiding (typeOf)
 import qualified Language.Atom.Expressions as E
 import Language.Atom.Scheduling
 import Language.Atom.UeMap
+import Language.Atom.Types
 
 -- | C code configuration parameters.
 data Config = Config
@@ -154,7 +155,8 @@ codeUE mp config ues d (ue', n) =
     MUVRef (MUVArray (UA _ k _) _)     -> [cStateName config, ".", k, "[", a, "]"]
     MUVRef (MUVArray (UAExtern k _) _) -> [k, "[", a, "]"]
     MUVRef (MUVExtern k _)             -> [k]
-    MUVRef (MUVChannel _ k _)          -> [cStateName config, ".", k]
+    MUVRef (MUVChannel _ k _)          -> [cStateName config, ".", chanVarCName k]
+    MUVRef (MUVChannelReady _ k)       -> [cStateName config, ".", chanReadyVarCName k]
     MUCast _ _     -> ["(", cType (typeOf ue' mp), ") ", a]
     MUConst c_     -> [showConst c_]
     MUAdd _ _      -> [a, " + ", b]
@@ -459,8 +461,8 @@ declState define a' = if isHierarchyEmpty a' then ""
          i ++ cType (E.typeOf $ head c) ++ " " ++ name ++ "[" ++ show (length c)
       ++ "];\n"
     -- render channel value and channel ready flag declarations
-    StateChannel   name c _   ->
-         i ++ cType (E.typeOf c) ++ " " ++ chanVarCName name ++ ";\n"
+    StateChannel   name t     ->
+         i ++ cType t ++ " " ++ chanVarCName name ++ ";\n"
       ++ i ++ cType Bool ++ " " ++ chanReadyVarCName name
       ++ ";\n"
 
@@ -471,14 +473,14 @@ declState define a' = if isHierarchyEmpty a' then ""
     StateHierarchy name items ->
          i ++ "{  /* " ++ name ++ " */\n"
       ++ intercalate ",\n" (map (f2 ("  " ++ i)) items) ++ "\n" ++ i ++ "}"
-    StateVariable  name c     -> i ++ "/* " ++ name ++ " */  " ++ showConst c
-    StateArray     name c     ->
+    StateVariable name c -> i ++ "/* " ++ name ++ " */  " ++ showConst c
+    StateArray name c ->
          i ++ "/* " ++ name ++ " */\n" ++ i ++ "{ "
       ++ intercalate ("\n" ++ i ++ ", ") (map showConst c) ++ "\n" ++ i ++ "}"
     -- render channel value and channel ready flag initial values
-    StateChannel   name c f   ->
-         i ++ "/* " ++ chanVarCName name ++ " */  " ++ showConst c ++ ",\n"
-      ++ i ++ "/* " ++ chanReadyVarCName name ++ " */ " ++ showConst f
+    StateChannel name t ->
+         i ++ "/* " ++ chanVarCName name ++ " */  " ++ initForType t ++ ",\n"
+      ++ i ++ "/* " ++ chanReadyVarCName name ++ " */ 0"
 
 -- | Generate C code for a rule as a void/void function @__rN@, where @N@ is
 -- the internal rule ID.
@@ -496,11 +498,12 @@ codeRule mp cfg rule@(Rule{}) =
     -- declare local vars
     concatMap (codeUE mp cfg ues "  ") ues ++
 
+    -- TODO remove if successful
     -- check the channel listen enable
-    maybe
-      ""
-      (\cname -> "  if (" ++ stateChanReadyVarCName cfg cname ++ ") {\n")
-      (ruleChanListen rule) ++
+    --maybe
+    --  ""
+    --  (\cname -> "  if (" ++ stateChanReadyVarCName cfg cname ++ ") {\n")
+    --  (ruleChanListen rule) ++
 
     -- check enable condition
     -- TODO indent appropriately depending on channel listen block
@@ -532,11 +535,12 @@ codeRule mp cfg rule@(Rule{}) =
     -- on the enable flag.
     concatMap codeAssign (ruleAssigns rule) ++
 
+    -- TODO remove if successful
     -- END channel listen condition
-    maybe
-      ""
-      (const "  }\n")
-      (ruleChanListen rule) ++
+    -- maybe
+    --   ""
+    --   (const "  }\n")
+    --   (ruleChanListen rule) ++
 
     -- END rule function
     "}\n\n"
@@ -557,12 +561,15 @@ codeRule mp cfg rule@(Rule{}) =
     codeAssign (uv', ue') = concat ["  ", lh, " = ", id' ue', ";\n"]
       where
       lh = case uv' of
-        MUV _ n _                     -> concat [cStateName cfg, ".", n]
-        MUVArray (UA _ n _)     index ->
-          concat [cStateName cfg, ".", n, "[", id' index, "]"]
-        MUVArray (UAExtern n _) index -> concat [n, "[", id' index, "]"]
-        MUVExtern n _                 -> n
-        MUVChannel _ _ _              -> error "MUVChannel can't appear in lhs of assign"
+        MUV _ n _                   -> concat [cStateName cfg, ".", n]
+        MUVArray (UA _ n _)     idx ->
+          concat [cStateName cfg, ".", n, "[", id' idx, "]"]
+        MUVArray (UAExtern n _) idx -> concat [n, "[", id' idx, "]"]
+        MUVExtern n _               -> n
+        MUVChannel{}                ->
+          error "MUVChannel can't appear in lhs of assign"
+        MUVChannelReady{}           ->
+          error "MUVChannelReady can't appear in lhs of assign"
 
 -- Don't generate code for the 'Assert' or 'Cover' variants
 codeRule _ _ _ = ""
@@ -639,3 +646,8 @@ codePeriodPhase config (period, phase, rules) = unlines
 -- in C.
 showTopo :: Int -> String
 showTopo i = "__" ++ show i
+
+-- | An initial value for variables of the given type. It turns out that 0
+-- works perfectly well for all our current types!
+initForType :: Type -> String
+initForType = const "0"

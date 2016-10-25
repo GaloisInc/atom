@@ -36,21 +36,23 @@ type Hash = Int
 
 -- | Keys corresponding to untyped variables in the UeMap.
 data MUV
-  = MUV Int String Const         -- ^ internal ID, name, initial value
+  = MUV Int String Const        -- ^ internal ID, name, initial value
   | MUVArray UA Hash
-  | MUVExtern String Type        -- ^ external name, type
-  | MUVChannel Int String Const  -- ^ internal ID, channel name, initial value
+  | MUVExtern String Type       -- ^ external name, type
+  | MUVChannel Int String Type  -- ^ internal ID, channel name, type
+  | MUVChannelReady Int String  -- ^ internal ID, channel name
   deriving (Show, Eq, Ord)
 
 -- | Transforms a 'UV' into a 'MUV', returning the possibly updated map.
 newUV :: UV -> UeMap -> (MUV, UeMap)
 newUV u mp =
   case u of
-    UV i j k        -> (MUV i j k, mp)
-    UVExtern i j    -> (MUVExtern i j, mp)
-    UVArray arr ue_ -> let (h,mp') = newUE ue_ mp in
-                       (MUVArray arr h, mp')
-    UVChannel i j k -> (MUVChannel i j k, mp)
+    UV i j k           -> (MUV i j k, mp)
+    UVExtern i j       -> (MUVExtern i j, mp)
+    UVArray arr ue_    -> let (h,mp') = newUE ue_ mp
+                          in (MUVArray arr h, mp')
+    UVChannel i j k    -> (MUVChannel i j k, mp)
+    UVChannelReady i j -> (MUVChannelReady i j, mp)
 
 -- | Corresponds to 'UE's --- the elements in the sharing structure.
 data UeElem
@@ -101,7 +103,8 @@ typeOf h mp = case getUE h mp of
     MUVRef     (MUV _ _ a)        -> E.typeOf a
     MUVRef     (MUVArray a _)     -> E.typeOf a
     MUVRef     (MUVExtern _ t)    -> t
-    MUVRef     (MUVChannel _ _ a) -> E.typeOf a
+    MUVRef     (MUVChannel _ _ t) -> t
+    MUVRef     (MUVChannelReady{}) -> Bool
     MUCast     t _                -> t
     MUConst    c                  -> E.typeOf c
     MUAdd      a _                -> typeOf' a
@@ -174,6 +177,7 @@ share e = case e of
   UVRef     (UVExtern i j)    -> maybeUpdate (MUVRef $ MUVExtern i j)
   UVRef     (UVArray arr a)   -> unOp a (\x -> MUVRef (MUVArray arr x))
   UVRef     (UVChannel i j k) -> maybeUpdate (MUVRef $ MUVChannel i j k)
+  UVRef     (UVChannelReady i j) -> maybeUpdate (MUVRef $ MUVChannelReady i j)
   UConst    a     -> maybeUpdate (MUConst a)
   UCast     t a   -> unOp a (MUCast t)
   UAdd      a b   -> binOp (a,b) MUAdd
@@ -261,6 +265,7 @@ recoverUE st h = case getUE h st of
   MUVRef     (MUVArray i a)     -> UVRef (UVArray i (recover' a))
   MUVRef     (MUVExtern i j)    -> UVRef (UVExtern i j)
   MUVRef     (MUVChannel i j k) -> UVRef (UVChannel i j k)
+  MUVRef     (MUVChannelReady i j) -> UVRef (UVChannelReady i j)
   MUCast     t a   -> UCast     t (recover' a)
   MUConst    a     -> UConst    a
   MUAdd      a b   -> UAdd      (recover' a) (recover' b)
@@ -309,6 +314,7 @@ ueUpstream h t = case getUE h t of
   MUVRef     (MUVArray _ a)  -> [a]
   MUVRef     (MUVExtern _ _) -> []
   MUVRef     (MUVChannel{})  -> []
+  MUVRef     (MUVChannelReady{}) -> []
   MUCast     _ a             -> [a]
   MUConst    _               -> []
   MUAdd      a b             -> [a, b]

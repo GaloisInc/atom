@@ -10,13 +10,11 @@ module Language.Atom.Elaboration
   , AtomDB     (..)
   , Global     (..)
   , Rule       (..)
+  , Chan       (..)
   , StateHierarchy (..)
   , buildAtom
   -- * Type Aliases and Utilities
-  , UID
-  , Name
   , Phase (..)
-  , Path
   , elaborate
   , var
   , var'
@@ -37,21 +35,11 @@ import Data.List
 import Data.Char
 import qualified Control.Monad.State.Strict as S
 
+import Language.Atom.Types
+import Language.Atom.Channel.Types
 import Language.Atom.Expressions hiding (typeOf)
 import Language.Atom.UeMap
 
-
-type UID = Int
-
--- | A name.
-type Name = String
-
--- | A hierarchical name.
-type Path = [Name]
-
--- | A phase is either the minimum phase or the exact phase.
-data Phase = MinPhase Int | ExactPhase Int
-  deriving (Show)
 
 data Global = Global
   { gRuleId    :: Int
@@ -93,9 +81,9 @@ data AtomDB = AtomDB
   , atomActions     :: [([String] -> String, [Hash])]
   , atomAsserts     :: [(Name, Hash)]
   , atomCovers      :: [(Name, Hash)]
-    -- | a channel ID to listen to
-  , atomChanListen  :: Maybe Name
-    -- | a sequence of (channel, expression) pairs for writes
+    -- | a list of (channel name, ready flag hash) to listen to
+  , atomChanListen  :: [(Name, Hash)]
+    -- | a list of (channel, channel value hash) pairs for writes
   , atomChanWrite   :: [(Name, Hash)]
   }
 
@@ -109,8 +97,8 @@ data Rule
     , ruleActions    :: [([String] -> String, [Hash])]
     , rulePeriod     :: Int
     , rulePhase      :: Phase
-    , ruleChanListen :: Maybe Name
-    , ruleChanWrite  :: [(Name, Hash)]
+    , ruleChanListen :: [(Name, Hash)]   -- ^ see corresonding field in Atom
+    , ruleChanWrite  :: [(Name, Hash)]   -- ^ see corresonding field in Atom
     }
   | Assert
     { ruleName      :: Name
@@ -123,11 +111,19 @@ data Rule
     , ruleCover     :: Hash
     }
 
+-- | 'Chan' identifies a single uni-directional channel after the elaboration
+-- phase.
+data Chan = Chan
+  { chanId     :: Int
+  , chanSrcId  :: Int
+  , chanDestId :: Int
+  }
+
 data StateHierarchy
   = StateHierarchy Name [StateHierarchy]
   | StateVariable  Name Const
   | StateArray     Name [Const]
-  | StateChannel   Name Const Const
+  | StateChannel   Name Type
   deriving (Show)
 
 instance Show AtomDB where show = atomName
@@ -227,6 +223,11 @@ reIdRules i (a:b) = case a of
   Rule{} -> a { ruleId = i } : reIdRules (i + 1) b
   _      -> a                : reIdRules  i      b
 
+-- | Get a list of all channels used in the given list of rules. 'ChanInput'
+-- is used (as opposed to 'ChanOutput') for no specific reason.
+getChannels :: [Rule] -> [ChanInput]
+getChannels = undefined
+
 buildAtom :: UeMap -> Global -> Name -> Atom a -> IO (a, AtomSt)
 buildAtom st g name (Atom f) = do
   let (h,st') = newUE (ubool True) st
@@ -243,7 +244,7 @@ buildAtom st g name (Atom f) = do
               , atomActions    = []
               , atomAsserts    = []
               , atomCovers     = []
-              , atomChanListen = Nothing
+              , atomChanListen = []
               , atomChanWrite  = []
               }
           )
@@ -293,7 +294,7 @@ put s = Atom (\ _ -> return ((), s))
 --
 elaborate :: UeMap -> Name -> Atom ()
           -> IO (Maybe ( UeMap
-                       , (  StateHierarchy, [Rule], [Name], [Name]
+                       , (  StateHierarchy, [Rule], [ChanInput], [Name], [Name]
                          , [(Name, Type)])
                        ))
 elaborate st name atom = do
@@ -301,6 +302,7 @@ elaborate st name atom = do
   let (h, st1)        = newUE (ubool True) st0
       (getRules, st2) = S.runState (elaborateRules h atomDB) st1
       rules           = reIdRules 0 (reverse getRules)
+      channels        = getChannels rules
       coverageNames   = [ name' | Cover  name' _ _ <- rules ]
       assertionNames  = [ name' | Assert name' _ _ <- rules ]
       probeNames      = [ (n, typeOf a st2) | (n, a) <- gProbes g ]
@@ -315,6 +317,7 @@ elaborate st name atom = do
                  then Just ( st2
                            , ( trimState . StateHierarchy name $ gState g
                              , rules
+                             , channels
                              , assertionNames
                              , coverageNames
                              , probeNames
@@ -337,9 +340,9 @@ isHierarchyEmpty :: StateHierarchy -> Bool
 isHierarchyEmpty h = case h of
   StateHierarchy _ i   -> if null i then True
                                     else and $ map isHierarchyEmpty i
-  StateVariable  _ _   -> False
-  StateArray     _ _   -> False
-  StateChannel   _ _ _ -> False
+  StateVariable  _ _ -> False
+  StateArray     _ _ -> False
+  StateChannel   _ _ -> False
 
 -- | Checks that a rule will not be trivially disabled.
 checkEnable :: UeMap -> Rule -> IO ()
@@ -437,6 +440,8 @@ allUVs st rules ue' = fixedpoint next $ nearestUVs ue' st
   next :: [MUV] -> [MUV]
   next uvs = sort $ nub $ uvs ++ concatMap previousUVs uvs
 
+-- | Apply the function until a fixedpoint is found. Why is this not in
+-- Prelude?
 fixedpoint :: Eq a => (a -> a) -> a -> a
 fixedpoint f a | a == f a  = a
                | otherwise = fixedpoint f $ f a

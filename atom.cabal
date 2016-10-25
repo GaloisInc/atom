@@ -53,6 +53,7 @@ library
         Language.Atom
         Language.Atom.Analysis
         Language.Atom.Channel
+        Language.Atom.Channel.Types
         Language.Atom.Code
         Language.Atom.Common
         Language.Atom.Common.Fader
@@ -67,6 +68,7 @@ library
         Language.Atom.Inspect
         Language.Atom.Language
         Language.Atom.Scheduling
+        Language.Atom.Types
         Language.Atom.Unit
         Language.Atom.UeMap
 

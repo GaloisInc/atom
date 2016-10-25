@@ -17,8 +17,8 @@ import Language.Atom
 main :: IO ()
 main = do
   let atomCfg = defaults { cCode = prePostCode , cRuleCoverage = False }
-  (sched, _, _, _, _) <- compile "probe_example" atomCfg example
-  putStrLn $ reportSchedule sched
+  r <- compile "probe_example" atomCfg example
+  putStrLn $ reportSchedule (compSchedule r)
 
 -- | Generate a code comment about the given probe.
 probeStr :: (Name, Type) -> String

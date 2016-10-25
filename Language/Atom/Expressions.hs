@@ -1,4 +1,4 @@
--- | 
+-- |
 -- Module: Expressions
 -- Description: Definitions for expressions, variables, and types
 -- Copyright: (c) 2013 Tom Hawkins & Lee Pike
@@ -178,10 +178,11 @@ data V a = V UV deriving Eq
 
 -- | Untyped variables.
 data UV
-  = UV Int String Const         -- ^ untyped var: internal ID, name, initial value
-  | UVArray UA UE               -- ^ untyped array: UA value, initial value expression
-  | UVExtern String Type        -- ^ external variable: name, type
-  | UVChannel Int String Const  -- ^ channel var: ID, name, init value
+  = UV Int String Const        -- ^ untyped var: internal ID, name, initial value
+  | UVArray UA UE              -- ^ untyped array: UA value, initial value expression
+  | UVExtern String Type       -- ^ external variable: name, type
+  | UVChannel Int String Type  -- ^ channel var: ID, name, type
+  | UVChannelReady Int String  -- ^ channel ready var: ID, name
   deriving (Show, Eq, Ord, Data, Typeable)
 
 -- | A typed array.
@@ -337,10 +338,11 @@ instance TypeOf Const where
 
 instance TypeOf UV where
   typeOf a' = case a' of
-    UV _ _ a        -> typeOf a
-    UVArray a _     -> typeOf a
-    UVExtern _ t    -> t
-    UVChannel _ _ a -> typeOf a
+    UV _ _ a           -> typeOf a
+    UVArray a _        -> typeOf a
+    UVExtern _ t       -> t
+    UVChannel _ _ t    -> t
+    UVChannelReady _ _ -> Bool
 
 instance TypeOf (V a) where
   typeOf (V uv') = typeOf uv'

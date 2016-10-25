@@ -9,6 +9,7 @@ module Language.Atom.Language
   (
     module Language.Atom.Expressions
   , module Language.Atom.Channel
+  , module Language.Atom.Channel.Types
   -- * Primary Language Containers
   , Atom
   -- * Hierarchical Rule Declarations
@@ -76,10 +77,12 @@ import Data.Word
 import Data.List (foldl')
 
 import Language.Atom.Channel
+import Language.Atom.Channel.Types
 import Language.Atom.Elaboration hiding (Atom)
 import qualified Language.Atom.Elaboration as E
 import Language.Atom.Expressions
 import Language.Atom.UeMap hiding (typeOf)
+import Language.Atom.Types
 
 infixr 1 <==
 
