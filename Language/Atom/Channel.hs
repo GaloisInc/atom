@@ -18,7 +18,7 @@ module Language.Atom.Channel
     -- * Channel operations
   , writeChannel
   , readChannel
-  , condChannel
+  , fullChannel
     -- * misc exports
   , channelPrefix
   )
@@ -31,7 +31,7 @@ import Language.Atom.Expressions
 import Language.Atom.UeMap (newUE)
 
 
--- Channel Declarations ------------------------------------------------
+-- Channel API ------------------------------------------------
 
 -- | Declare a typed channel. Returns channel input/output handles.
 channel :: Name  -- ^ channel name
@@ -53,21 +53,6 @@ channel name t = do
       )
   return (cin, cout)
 
--- | State struct name prefix for channel variables
-channelPrefix :: String
-channelPrefix = "__channel_"
-
--- | Construct a channel variable which, in the C code generation case, is a
--- stand-in for part of the global state sructure (the part storing the channel
--- content).
-chanVar :: HasChan b => b -> UV
-chanVar c = UVChannel (chanID c) (chanName c) (chanType c)
-
--- | Not exported. Use condChannel instead to condition execution of an Atom
--- on the readiness of a channel.
-readyVar :: HasChan b => b -> UV
-readyVar c = UVChannelReady (chanID c) (chanName c)
-
 -- | Write a message to a typed channel. The write operation happens once
 -- (i.e. the last writeChannel in the sequence is used) after the assignment
 -- (computation) phase of the Atom's execution.
@@ -85,16 +70,36 @@ writeChannel cin e = do
 readChannel :: ChanOutput -> E a
 readChannel = VRef . V . chanVar
 
-readyChannel :: ChanOutput -> E Bool
-readyChannel = VRef . V . readyVar
+-- | Check if the channel contains a message.
+fullChannel :: ChanOutput -> E Bool
+fullChannel = VRef . V . readyVar
 
--- | Condition execution of an atom on the given channel containing an unread
--- message.
-condChannel :: ChanOutput -> Atom (E Bool)
-condChannel c = do
-  (st, (g, atom)) <- get
-  let e        = readyChannel c
-      (h, st0) = newUE (ue e) st
-  put (st0, (g, atom { atomChanListen =  atomChanListen atom
-                                     ++ [(chanName c, h)] }))
-  return $ readyChannel c
+
+-- Helpers -------------------------------------------------------------------
+
+-- | State struct name prefix for channel variables
+channelPrefix :: String
+channelPrefix = "__channel_"
+
+-- | Construct a channel variable which, in the C code generation case, is a
+-- stand-in for part of the global state sructure (the part storing the channel
+-- content).
+chanVar :: HasChan b => b -> UV
+chanVar c = UVChannel (chanID c) (chanName c) (chanType c)
+
+-- | Not exported. Use condChannel instead to condition execution of an Atom
+-- on the readiness of a channel.
+readyVar :: HasChan b => b -> UV
+readyVar c = UVChannelReady (chanID c) (chanName c)
+
+-- TODO remove if succesfull
+-- -- | Condition execution of an atom on the given channel containing an unread
+-- -- message.
+-- condChannel :: ChanOutput -> Atom (E Bool)
+-- condChannel c = do
+--   (st, (g, atom)) <- get
+--   let e        = readyChannel c
+--       (h, st0) = newUE (ue e) st
+--   put (st0, (g, atom { atomChanListen =  atomChanListen atom
+--                                      ++ [(chanName c, h)] }))
+--   return $ readyChannel c

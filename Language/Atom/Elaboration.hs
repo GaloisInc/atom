@@ -10,7 +10,6 @@ module Language.Atom.Elaboration
   , AtomDB     (..)
   , Global     (..)
   , Rule       (..)
-  , Chan       (..)
   , StateHierarchy (..)
   , buildAtom
   -- * Type Aliases and Utilities
@@ -110,14 +109,6 @@ data Rule
     , ruleEnable    :: Hash
     , ruleCover     :: Hash
     }
-
--- | 'Chan' identifies a single uni-directional channel after the elaboration
--- phase.
-data Chan = Chan
-  { chanId     :: Int
-  , chanSrcId  :: Int
-  , chanDestId :: Int
-  }
 
 data StateHierarchy
   = StateHierarchy Name [StateHierarchy]
