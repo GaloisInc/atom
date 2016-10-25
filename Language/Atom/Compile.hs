@@ -28,7 +28,7 @@ import Language.Atom.Language hiding (Atom)
 data CompileResult = CompileResult
   { compSchedule    :: Schedule        -- ^ schedule computed by the compiler
   , compCoverage    :: RuleCoverage    -- ^ rule coverage
-  , compChans       :: [ChanInput]     -- ^ channels used in the system
+  , compChans       :: [ChanOutput]    -- ^ channels used in the system
   , compAssertNames :: [Name]          -- ^ assertion statement names
   , compCoverNames  :: [Name]          -- ^ coverage statement names
   , compProbes      :: [(Name, Type)]  -- ^ declared probe names and types

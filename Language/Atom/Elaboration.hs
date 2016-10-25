@@ -214,10 +214,24 @@ reIdRules i (a:b) = case a of
   Rule{} -> a { ruleId = i } : reIdRules (i + 1) b
   _      -> a                : reIdRules  i      b
 
--- | Get a list of all channels used in the given list of rules. 'ChanInput'
--- is used (as opposed to 'ChanOutput') for no specific reason.
-getChannels :: [Rule] -> [ChanInput]
-getChannels = undefined
+-- | Get a list of all channels written to in the given list of rules.
+getChannels :: UeMap -> [Rule] -> [ChanOutput]
+getChannels mp rs = concatMap getChannels' rs
+  where getChannels' :: Rule -> [ChanOutput]
+        getChannels' r@(Rule{}) =
+          let hs = map snd (ruleChanWrite r)
+              -- collect the MUV's
+              f u acc = case getUE u mp of
+                          MUVRef m -> m : acc
+                          _        -> acc
+              muvs = foldr f [] hs
+              -- collect the channels
+              g m acc = case m of
+                          MUVChannel i nm t -> mkChanOutput i nm t : acc
+                          _ -> acc
+          in foldr g [] muvs
+
+        getChannels' _ = []
 
 buildAtom :: UeMap -> Global -> Name -> Atom a -> IO (a, AtomSt)
 buildAtom st g name (Atom f) = do
@@ -285,7 +299,7 @@ put s = Atom (\ _ -> return ((), s))
 --
 elaborate :: UeMap -> Name -> Atom ()
           -> IO (Maybe ( UeMap
-                       , (  StateHierarchy, [Rule], [ChanInput], [Name], [Name]
+                       , (  StateHierarchy, [Rule], [ChanOutput], [Name], [Name]
                          , [(Name, Type)])
                        ))
 elaborate st name atom = do
@@ -293,7 +307,7 @@ elaborate st name atom = do
   let (h, st1)        = newUE (ubool True) st0
       (getRules, st2) = S.runState (elaborateRules h atomDB) st1
       rules           = reIdRules 0 (reverse getRules)
-      channels        = getChannels rules
+      channels        = getChannels st rules
       coverageNames   = [ name' | Cover  name' _ _ <- rules ]
       assertionNames  = [ name' | Assert name' _ _ <- rules ]
       probeNames      = [ (n, typeOf a st2) | (n, a) <- gProbes g ]
@@ -448,6 +462,7 @@ allUEs rule = ruleEnable rule : ues
     Rule{} ->
          concat [ ue' : index uv' | (uv', ue') <- ruleAssigns rule ]
       ++ concat (snd (unzip (ruleActions rule)))
+      ++ map snd (ruleChanListen rule)
       ++ map snd (ruleChanWrite rule)
     Assert _ _ a       -> [a]
     Cover  _ _ a       -> [a]
