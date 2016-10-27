@@ -28,9 +28,6 @@ module Language.Atom.Elaboration
   , isHierarchyEmpty
   ) where
 
-import Debug.Trace
-import Text.Printf
-
 import Control.Monad (ap)
 import Control.Monad.Trans
 import Data.Function (on)
@@ -84,8 +81,6 @@ data AtomDB = AtomDB
   , atomActions     :: [([String] -> String, [Hash])]
   , atomAsserts     :: [(Name, Hash)]
   , atomCovers      :: [(Name, Hash)]
-    -- XXX | a list of (channel output, ready flag hash) to listen to
-    -- , atomChanListen  :: [(ChanOutput, Hash)]
     -- | a list of (channel input, channel value hash) pairs for writes
   , atomChanWrite   :: [(ChanInput, Hash)]
   }
@@ -100,7 +95,6 @@ data Rule
     , ruleActions    :: [([String] -> String, [Hash])]
     , rulePeriod     :: Int
     , rulePhase      :: Phase
-    -- XXX , ruleChanListen :: [(ChanOutput, Hash)]  -- ^ see corresonding field in Atom
     , ruleChanWrite  :: [(ChanInput, Hash)]   -- ^ see corresonding field in Atom
     }
   | Assert
@@ -238,8 +232,7 @@ getChannels rs = concatMap getChannels' rs
                              , cinfoName      = chanName cin
                              , cinfoValueExpr = h
                              }
-              chans = map f (ruleChanWrite r)
-          in trace (printf "ruleId %d with %d chanWrites and %d chans\n" (ruleId r) (length . ruleChanWrite $ r) (length chans)) $ chans
+          in map f (ruleChanWrite r)
 
         getChannels' _ = []  -- asserts and coverage statements have no channels
 
@@ -473,7 +466,6 @@ allUEs rule = ruleEnable rule : ues
     Rule{} ->
          concat [ ue' : index uv' | (uv', ue') <- ruleAssigns rule ]
       ++ concat (snd (unzip (ruleActions rule)))
-      -- XXX ++ map snd (ruleChanListen rule)
       ++ map snd (ruleChanWrite rule)
     Assert _ _ a       -> [a]
     Cover  _ _ a       -> [a]
