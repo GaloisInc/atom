@@ -7,9 +7,10 @@ module Language.Atom.Elaboration
   (
   -- * Atom monad and container.
     Atom
-  , AtomDB     (..)
-  , Global     (..)
-  , Rule       (..)
+  , AtomDB   (..)
+  , Global   (..)
+  , Rule     (..)
+  , ChanInfo (..)
   , StateHierarchy (..)
   , buildAtom
   -- * Type Aliases and Utilities
@@ -27,11 +28,14 @@ module Language.Atom.Elaboration
   , isHierarchyEmpty
   ) where
 
+import Debug.Trace
+import Text.Printf
+
 import Control.Monad (ap)
 import Control.Monad.Trans
 import Data.Function (on)
-import Data.List
-import Data.Char
+import Data.Char (isAlpha, isAlphaNum)
+import Data.List (nub, sort)
 import qualified Control.Monad.State.Strict as S
 
 import Language.Atom.Types
@@ -80,10 +84,10 @@ data AtomDB = AtomDB
   , atomActions     :: [([String] -> String, [Hash])]
   , atomAsserts     :: [(Name, Hash)]
   , atomCovers      :: [(Name, Hash)]
-    -- | a list of (channel name, ready flag hash) to listen to
-  , atomChanListen  :: [(Name, Hash)]
-    -- | a list of (channel, channel value hash) pairs for writes
-  , atomChanWrite   :: [(Name, Hash)]
+    -- XXX | a list of (channel output, ready flag hash) to listen to
+    -- , atomChanListen  :: [(ChanOutput, Hash)]
+    -- | a list of (channel input, channel value hash) pairs for writes
+  , atomChanWrite   :: [(ChanInput, Hash)]
   }
 
 -- XXX sum of records leads to partial record field functions
@@ -96,8 +100,8 @@ data Rule
     , ruleActions    :: [([String] -> String, [Hash])]
     , rulePeriod     :: Int
     , rulePhase      :: Phase
-    , ruleChanListen :: [(Name, Hash)]   -- ^ see corresonding field in Atom
-    , ruleChanWrite  :: [(Name, Hash)]   -- ^ see corresonding field in Atom
+    -- XXX , ruleChanListen :: [(ChanOutput, Hash)]  -- ^ see corresonding field in Atom
+    , ruleChanWrite  :: [(ChanInput, Hash)]   -- ^ see corresonding field in Atom
     }
   | Assert
     { ruleName      :: Name
@@ -109,6 +113,15 @@ data Rule
     , ruleEnable    :: Hash
     , ruleCover     :: Hash
     }
+
+-- | Compiled channel info used to return channel info from the elaboration
+-- functions.
+data ChanInfo = ChanInfo
+  { cinfoSrc       :: Int   -- ^ ruleId of source
+  , cinfoId        :: Int   -- ^ internal channel ID
+  , cinfoName      :: Name  -- ^ user supplied channel name
+  , cinfoValueExpr :: Hash  -- ^ hash to channel value expression
+  }
 
 data StateHierarchy
   = StateHierarchy Name [StateHierarchy]
@@ -157,7 +170,7 @@ elaborateRules parentEnable atom =
         , ruleActions    = atomActions atom
         , rulePeriod     = atomPeriod  atom
         , rulePhase      = atomPhase   atom
-        , ruleChanListen = atomChanListen atom
+        -- , ruleChanListen = atomChanListen atom
         , ruleChanWrite  = atomChanWrite atom
         }
 
@@ -215,23 +228,20 @@ reIdRules i (a:b) = case a of
   _      -> a                : reIdRules  i      b
 
 -- | Get a list of all channels written to in the given list of rules.
-getChannels :: UeMap -> [Rule] -> [ChanOutput]
-getChannels mp rs = concatMap getChannels' rs
-  where getChannels' :: Rule -> [ChanOutput]
+getChannels :: [Rule] -> [ChanInfo]
+getChannels rs = concatMap getChannels' rs
+  where getChannels' :: Rule -> [ChanInfo]
         getChannels' r@(Rule{}) =
-          let hs = map snd (ruleChanWrite r)
-              -- collect the MUV's
-              f u acc = case getUE u mp of
-                          MUVRef m -> m : acc
-                          _        -> acc
-              muvs = foldr f [] hs
-              -- collect the channels
-              g m acc = case m of
-                          MUVChannel i nm t -> mkChanOutput i nm t : acc
-                          _ -> acc
-          in foldr g [] muvs
+          let f (cin, h) = ChanInfo
+                             { cinfoSrc       = ruleId r
+                             , cinfoId        = chanID cin
+                             , cinfoName      = chanName cin
+                             , cinfoValueExpr = h
+                             }
+              chans = map f (ruleChanWrite r)
+          in trace (printf "ruleId %d with %d chanWrites and %d chans\n" (ruleId r) (length . ruleChanWrite $ r) (length chans)) $ chans
 
-        getChannels' _ = []
+        getChannels' _ = []  -- asserts and coverage statements have no channels
 
 buildAtom :: UeMap -> Global -> Name -> Atom a -> IO (a, AtomSt)
 buildAtom st g name (Atom f) = do
@@ -249,7 +259,7 @@ buildAtom st g name (Atom f) = do
               , atomActions    = []
               , atomAsserts    = []
               , atomCovers     = []
-              , atomChanListen = []
+              -- , atomChanListen = []
               , atomChanWrite  = []
               }
           )
@@ -299,7 +309,7 @@ put s = Atom (\ _ -> return ((), s))
 --
 elaborate :: UeMap -> Name -> Atom ()
           -> IO (Maybe ( UeMap
-                       , (  StateHierarchy, [Rule], [ChanOutput], [Name], [Name]
+                       , (  StateHierarchy, [Rule], [ChanInfo], [Name], [Name]
                          , [(Name, Type)])
                        ))
 elaborate st name atom = do
@@ -307,7 +317,8 @@ elaborate st name atom = do
   let (h, st1)        = newUE (ubool True) st0
       (getRules, st2) = S.runState (elaborateRules h atomDB) st1
       rules           = reIdRules 0 (reverse getRules)
-      channels        = getChannels st rules
+      -- channel source and dest are numbered based on 'ruleId's in 'rules'
+      channels        = getChannels rules
       coverageNames   = [ name' | Cover  name' _ _ <- rules ]
       assertionNames  = [ name' | Assert name' _ _ <- rules ]
       probeNames      = [ (n, typeOf a st2) | (n, a) <- gProbes g ]
@@ -462,7 +473,7 @@ allUEs rule = ruleEnable rule : ues
     Rule{} ->
          concat [ ue' : index uv' | (uv', ue') <- ruleAssigns rule ]
       ++ concat (snd (unzip (ruleActions rule)))
-      ++ map snd (ruleChanListen rule)
+      -- XXX ++ map snd (ruleChanListen rule)
       ++ map snd (ruleChanWrite rule)
     Assert _ _ a       -> [a]
     Cover  _ _ a       -> [a]

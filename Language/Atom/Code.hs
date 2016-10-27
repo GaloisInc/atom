@@ -23,6 +23,7 @@ import Data.Word
 import qualified Data.Bimap as M
 
 import Language.Atom.Analysis
+import Language.Atom.Channel.Types
 import Language.Atom.Elaboration
 import Language.Atom.Expressions hiding (typeOf)
 import qualified Language.Atom.Expressions as E
@@ -519,10 +520,10 @@ codeRule mp cfg rule@(Rule{}) =
 
     -- render channel write
     concatMap
-      (\(cname, h) -> "      " ++ stateChanVarCName cfg cname
-                               ++ " = " ++ id' h ++ ";\n"
-                   ++ "      " ++ stateChanReadyVarCName cfg cname
-                               ++ " = true;\n")
+      (\(cin, h) -> "      " ++ stateChanVarCName cfg (chanName cin)
+                             ++ " = " ++ id' h ++ ";\n"
+                 ++ "      " ++ stateChanReadyVarCName cfg (chanName cin)
+                             ++ " = true;\n")
       (ruleChanWrite rule) ++
 
     -- END enable condition

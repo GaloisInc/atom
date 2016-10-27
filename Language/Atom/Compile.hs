@@ -16,7 +16,6 @@ import System.Exit
 import Control.Monad (when)
 import Data.Maybe (isJust)
 
-import Language.Atom.Channel.Types
 import Language.Atom.Code
 import Language.Atom.Scheduling
 import Language.Atom.Elaboration
@@ -28,7 +27,7 @@ import Language.Atom.Language hiding (Atom)
 data CompileResult = CompileResult
   { compSchedule    :: Schedule        -- ^ schedule computed by the compiler
   , compCoverage    :: RuleCoverage    -- ^ rule coverage
-  , compChans       :: [ChanOutput]    -- ^ channels used in the system
+  , compChans       :: [ChanInfo]    -- ^ channels used in the system
   , compAssertNames :: [Name]          -- ^ assertion statement names
   , compCoverNames  :: [Name]          -- ^ coverage statement names
   , compProbes      :: [(Name, Type)]  -- ^ declared probe names and types

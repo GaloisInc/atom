@@ -63,7 +63,7 @@ writeChannel cin e = do
   (st, (g, atom)) <- get
   let (h, st0) = newUE (ue e) st
   put (st0, (g, atom { atomChanWrite = atomChanWrite atom
-                                    ++ [(chanName cin, h)] }))
+                                    ++ [(cin, h)] }))
 
 -- | Read a message from a typed channel. This function returns an expression
 -- representing the value of the last message written (or the initial content).
