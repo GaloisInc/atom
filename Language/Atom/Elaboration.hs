@@ -114,6 +114,7 @@ data ChanInfo = ChanInfo
   { cinfoSrc       :: Int   -- ^ ruleId of source
   , cinfoId        :: Int   -- ^ internal channel ID
   , cinfoName      :: Name  -- ^ user supplied channel name
+  , cinfoType      :: Type  -- ^ channel type
   , cinfoValueExpr :: Hash  -- ^ hash to channel value expression
   }
 
@@ -230,6 +231,7 @@ getChannels rs = concatMap getChannels' rs
                              { cinfoSrc       = ruleId r
                              , cinfoId        = chanID cin
                              , cinfoName      = chanName cin
+                             , cinfoType      = chanType cin
                              , cinfoValueExpr = h
                              }
           in map f (ruleChanWrite r)
