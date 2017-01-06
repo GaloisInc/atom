@@ -138,8 +138,10 @@ elaborateRules parentEnable atom =
                       return $ r : rs
                else rules
   where
-    -- are there either assignments or actions to be done?
-    isRule = not $ null (atomAssigns atom) && null (atomActions atom)
+    -- are there either assignments, actions, or writeChannels to be done?
+    isRule = not $  null (atomAssigns atom)
+                      && null (atomActions atom)
+                      && null (atomChanWrite atom)
 
     -- combine the parent enable and the child enable conditions
     enable :: UeState Hash
