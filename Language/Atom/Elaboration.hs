@@ -117,6 +117,7 @@ data ChanInfo = ChanInfo
   , cinfoType      :: Type  -- ^ channel type
   , cinfoValueExpr :: Hash  -- ^ hash to channel value expression
   }
+  deriving (Eq, Show)
 
 data StateHierarchy
   = StateHierarchy Name [StateHierarchy]
