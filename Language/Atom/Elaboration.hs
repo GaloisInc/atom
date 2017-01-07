@@ -83,19 +83,21 @@ data AtomDB = AtomDB
   , atomCovers      :: [(Name, Hash)]
     -- | a list of (channel input, channel value hash) pairs for writes
   , atomChanWrite   :: [(ChanInput, Hash)]
+  , atomChanConsume :: [ChanOutput]
   }
 
 -- XXX sum of records leads to partial record field functions
 data Rule
   = Rule
-    { ruleId         :: Int
-    , ruleName       :: Name
-    , ruleEnable     :: Hash
-    , ruleAssigns    :: [(MUV, Hash)]
-    , ruleActions    :: [([String] -> String, [Hash])]
-    , rulePeriod     :: Int
-    , rulePhase      :: Phase
-    , ruleChanWrite  :: [(ChanInput, Hash)]   -- ^ see corresonding field in Atom
+    { ruleId          :: Int
+    , ruleName        :: Name
+    , ruleEnable      :: Hash
+    , ruleAssigns     :: [(MUV, Hash)]
+    , ruleActions     :: [([String] -> String, [Hash])]
+    , rulePeriod      :: Int
+    , rulePhase       :: Phase
+    , ruleChanWrite   :: [(ChanInput, Hash)]  -- ^ see corresonding field in Atom
+    , ruleChanConsume :: [ChanOutput]
     }
   | Assert
     { ruleName      :: Name
@@ -170,6 +172,7 @@ elaborateRules parentEnable atom =
         , rulePhase      = atomPhase   atom
         -- , ruleChanListen = atomChanListen atom
         , ruleChanWrite  = atomChanWrite atom
+        , ruleChanConsume = atomChanConsume atom
         }
 
     assert :: (Name, Hash) -> UeState Rule
@@ -246,19 +249,19 @@ buildAtom st g name (Atom f) = do
   let (h,st') = newUE (ubool True) st
   f (st', ( g { gRuleId = gRuleId g + 1 }
           , AtomDB
-              { atomId         = gRuleId g
-              , atomName       = name
-              , atomNames      = []
-              , atomEnable     = h
-              , atomSubs       = []
-              , atomPeriod     = gPeriod g
-              , atomPhase      = gPhase  g
-              , atomAssigns    = []
-              , atomActions    = []
-              , atomAsserts    = []
-              , atomCovers     = []
-              -- , atomChanListen = []
-              , atomChanWrite  = []
+              { atomId          = gRuleId g
+              , atomName        = name
+              , atomNames       = []
+              , atomEnable      = h
+              , atomSubs        = []
+              , atomPeriod      = gPeriod g
+              , atomPhase       = gPhase  g
+              , atomAssigns     = []
+              , atomActions     = []
+              , atomAsserts     = []
+              , atomCovers      = []
+              , atomChanWrite   = []
+              , atomChanConsume = []
               }
           )
     )
