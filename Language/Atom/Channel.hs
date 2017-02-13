@@ -100,15 +100,3 @@ chanVar c = UVChannel (chanID c) (chanName c) (chanType c)
 -- on the readiness of a channel.
 readyVar :: HasChan b => b -> UV
 readyVar c = UVChannelReady (chanID c) (chanName c)
-
--- TODO remove if succesfull
--- -- | Condition execution of an atom on the given channel containing an unread
--- -- message.
--- condChannel :: ChanOutput -> Atom (E Bool)
--- condChannel c = do
---   (st, (g, atom)) <- get
---   let e        = readyChannel c
---       (h, st0) = newUE (ue e) st
---   put (st0, (g, atom { atomChanListen =  atomChanListen atom
---                                      ++ [(chanName c, h)] }))
---   return $ readyChannel c
