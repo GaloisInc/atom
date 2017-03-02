@@ -17,7 +17,6 @@ module Language.Atom.Channel
     channel
     -- * Channel operations
   , writeChannel
-  , consumeChannel
   , readChannel
   , fullChannel
     -- * misc exports
@@ -66,18 +65,14 @@ writeChannel cin e = do
   put (st0, (g, atom { atomChanWrite = atomChanWrite atom
                                     ++ [(cin, h)] }))
 
--- | Consume the message on a channel. 'readChannel' will still return the
--- last value held by the channel, but afterward 'fullChannel' will return
--- False.
-consumeChannel :: ChanOutput -> Atom ()
-consumeChannel cout = do
-  (st, (g, atom)) <- get
-  put (st, (g, atom { atomChanConsume = atomChanConsume atom ++ [cout] }))
-
--- | Read a message from a typed channel. This function returns an expression
+-- | Read a message from a typed channel. This action returns an expression
 -- representing the value of the last message written (or the initial content).
-readChannel :: ChanOutput -> E a
-readChannel = VRef . V . chanVar
+-- In the course of reading a message, it is consumed.
+readChannel :: ChanOutput -> Atom (E a)
+readChannel cout = do
+  (st, (g, atom)) <- get
+  put (st, (g, atom { atomChanRead = atomChanRead atom ++ [cout] }))
+  return . VRef . V . chanVar $ cout
 
 -- | Check if the channel contains a message.
 fullChannel :: ChanOutput -> E Bool

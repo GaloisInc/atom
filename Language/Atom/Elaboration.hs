@@ -33,6 +33,9 @@ import Control.Monad.Trans
 import Data.Function (on)
 import Data.Char (isAlpha, isAlphaNum)
 import Data.List (nub, sort)
+import qualified Data.Map.Strict as Map
+import Data.Map.Strict (Map)
+import Data.Maybe (isJust, isNothing)
 import qualified Control.Monad.State.Strict as S
 
 import Language.Atom.Types
@@ -83,7 +86,7 @@ data AtomDB = AtomDB
   , atomCovers      :: [(Name, Hash)]
     -- | a list of (channel input, channel value hash) pairs for writes
   , atomChanWrite   :: [(ChanInput, Hash)]
-  , atomChanConsume :: [ChanOutput]
+  , atomChanRead    :: [ChanOutput]
   }
 
 -- XXX sum of records leads to partial record field functions
@@ -97,7 +100,7 @@ data Rule
     , rulePeriod      :: Int
     , rulePhase       :: Phase
     , ruleChanWrite   :: [(ChanInput, Hash)]  -- ^ see corresonding field in Atom
-    , ruleChanConsume :: [ChanOutput]
+    , ruleChanRead    :: [ChanOutput]
     }
   | Assert
     { ruleName      :: Name
@@ -113,12 +116,13 @@ data Rule
 -- | Compiled channel info used to return channel info from the elaboration
 -- functions.
 data ChanInfo = ChanInfo
-  { cinfoSrc       :: Int   -- ^ ruleId of source
-  , cinfoId        :: Int   -- ^ internal channel ID
-  , cinfoName      :: Name  -- ^ user supplied channel name
-  , cinfoType      :: Type  -- ^ channel type
-  , cinfoValueExpr :: Hash  -- ^ hash to channel value expression
-  }
+  { cinfoSrc       :: Maybe Int   -- ^ ruleId of source, either this or next is set
+  , cinfoRecv      :: Maybe Int   -- ^ ruleId of receiver
+  , cinfoId        :: Int         -- ^ internal channel ID
+  , cinfoName      :: Name        -- ^ user supplied channel name
+  , cinfoType      :: Type        -- ^ channel type
+  , cinfoValueExpr :: Maybe Hash  -- ^ hash to channel value expression, may
+  }                               --   or may not be set
   deriving (Eq, Show)
 
 data StateHierarchy
@@ -172,7 +176,7 @@ elaborateRules parentEnable atom =
         , rulePhase      = atomPhase   atom
         -- , ruleChanListen = atomChanListen atom
         , ruleChanWrite  = atomChanWrite atom
-        , ruleChanConsume = atomChanConsume atom
+        , ruleChanRead = atomChanRead atom
         }
 
     assert :: (Name, Hash) -> UeState Rule
@@ -229,39 +233,74 @@ reIdRules i (a:b) = case a of
   _      -> a                : reIdRules  i      b
 
 -- | Get a list of all channels written to in the given list of rules.
-getChannels :: [Rule] -> [ChanInfo]
-getChannels rs = concatMap getChannels' rs
-  where getChannels' :: Rule -> [ChanInfo]
+getChannels :: [Rule] -> Map Int ChanInfo
+getChannels rs = Map.unionsWith mergeInfo (map getChannels' rs)
+  where getChannels' :: Rule -> Map Int ChanInfo
         getChannels' r@(Rule{}) =
-          let f (cin, h) = ChanInfo
-                             { cinfoSrc       = ruleId r
-                             , cinfoId        = chanID cin
-                             , cinfoName      = chanName cin
-                             , cinfoType      = chanType cin
-                             , cinfoValueExpr = h
-                             }
-          in map f (ruleChanWrite r)
+          -- TODO: fwrite and fread could be refactored in more concise way
+          let fwrite :: (ChanInput, Hash) -> (Int, ChanInfo)
+              fwrite (c, h) = ( chanID c
+                              , ChanInfo
+                                  { cinfoSrc       = Just (ruleId r)
+                                  , cinfoRecv      = Nothing
+                                  , cinfoId        = chanID c
+                                  , cinfoName      = chanName c
+                                  , cinfoType      = chanType c
+                                  , cinfoValueExpr = Just h
+                                  }
+                              )
+              fread :: ChanOutput -> (Int, ChanInfo)
+              fread c = ( chanID c
+                        , ChanInfo
+                            { cinfoSrc       = Nothing
+                            , cinfoRecv      = Just (ruleId r)
+                            , cinfoId        = chanID c
+                            , cinfoName      = chanName c
+                            , cinfoType      = chanType c
+                            , cinfoValueExpr = Nothing
+                            }
+                        )
+          in Map.fromList (map fwrite (ruleChanWrite r)
+                           ++ map fread (ruleChanRead r))
+        getChannels' _ = Map.empty  -- asserts and coverage statements have no channels
 
-        getChannels' _ = []  -- asserts and coverage statements have no channels
+        -- Merge two channel info records, in particular this unions the
+        -- `cinfoSrc` fields and also the `cinfoRecv` fields.
+        mergeInfo :: ChanInfo -> ChanInfo -> ChanInfo
+        mergeInfo c1 c2 =
+          if (cinfoId c1 == cinfoId c2) &&      -- check invariant
+             (cinfoName c1 == cinfoName c2) &&
+             (cinfoType c1 == cinfoType c2) &&
+             ((cinfoValueExpr c1 == cinfoValueExpr c2) ||  -- either equal or
+              (isNothing (cinfoValueExpr c1)) ||           -- one is a Nothing
+              (isNothing (cinfoValueExpr c2)))
+             then c1 -- { cinfoSrc = cinfoSrc c1 `union` cinfoSrc c2
+                     -- , cinfoRecv = cinfoRecv c1 `union` cinfoRecv c2
+                     { cinfoSrc = muxMaybe (cinfoSrc c1) (cinfoSrc c2)
+                     , cinfoRecv = muxMaybe (cinfoRecv c1) (cinfoRecv c2)
+                     , cinfoValueExpr = muxMaybe (cinfoValueExpr c1)
+                                                 (cinfoValueExpr c2)
+                     }
+             else error "Elaboration: getChannels: mismatch occured"
 
 buildAtom :: UeMap -> Global -> Name -> Atom a -> IO (a, AtomSt)
 buildAtom st g name (Atom f) = do
   let (h,st') = newUE (ubool True) st
   f (st', ( g { gRuleId = gRuleId g + 1 }
           , AtomDB
-              { atomId          = gRuleId g
-              , atomName        = name
-              , atomNames       = []
-              , atomEnable      = h
-              , atomSubs        = []
-              , atomPeriod      = gPeriod g
-              , atomPhase       = gPhase  g
-              , atomAssigns     = []
-              , atomActions     = []
-              , atomAsserts     = []
-              , atomCovers      = []
-              , atomChanWrite   = []
-              , atomChanConsume = []
+              { atomId        = gRuleId g
+              , atomName      = name
+              , atomNames     = []
+              , atomEnable    = h
+              , atomSubs      = []
+              , atomPeriod    = gPeriod g
+              , atomPhase     = gPhase  g
+              , atomAssigns   = []
+              , atomActions   = []
+              , atomAsserts   = []
+              , atomCovers    = []
+              , atomChanWrite = []
+              , atomChanRead  = []
               }
           )
     )
@@ -319,7 +358,7 @@ elaborate st name atom = do
       (getRules, st2) = S.runState (elaborateRules h atomDB) st1
       rules           = reIdRules 0 (reverse getRules)
       -- channel source and dest are numbered based on 'ruleId's in 'rules'
-      channels        = getChannels rules
+      channels        = Map.elems (getChannels rules)
       coverageNames   = [ name' | Cover  name' _ _ <- rules ]
       assertionNames  = [ name' | Assert name' _ _ <- rules ]
       probeNames      = [ (n, typeOf a st2) | (n, a) <- gProbes g ]
@@ -477,3 +516,9 @@ allUEs rule = ruleEnable rule : ues
       ++ map snd (ruleChanWrite rule)
     Assert _ _ a       -> [a]
     Cover  _ _ a       -> [a]
+
+-- | Left biased combination of maybe values. `muxMaybe` has the property that
+-- if one of the two inputs is a `Just`, then the output will also be.
+muxMaybe :: Maybe a -> Maybe a -> Maybe a
+muxMaybe x y = if isJust x then x
+                           else y

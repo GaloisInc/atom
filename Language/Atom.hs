@@ -43,7 +43,7 @@ module Language.Atom
     action, call, probe, probes, assert, cover, assertImply, Name, liftIO,
     path, clock, nextCoverage,
     -- ** channels
-    channel, ChanInput (..), ChanOutput (..), writeChannel, consumeChannel,
+    channel, ChanInput (..), ChanOutput (..), writeChannel,
     readChannel, fullChannel,
     -- * Expressions
     -- | Module: "Language.Atom.Expressions"

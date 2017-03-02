@@ -526,12 +526,6 @@ codeRule mp cfg rule@(Rule{}) =
                              ++ " = true;\n")
       (ruleChanWrite rule) ++
 
-    -- render channel consumes
-    concatMap
-      (\cout     -> "      " ++ stateChanReadyVarCName cfg (chanName cout)
-                             ++ " = false;\n")
-      (ruleChanConsume rule) ++
-
     -- END enable condition
     "    }\n" ++
 
@@ -542,12 +536,13 @@ codeRule mp cfg rule@(Rule{}) =
     -- on the enable flag.
     concatMap codeAssign (ruleAssigns rule) ++
 
-    -- TODO remove if successful
-    -- END channel listen condition
-    -- maybe
-    --   ""
-    --   (const "  }\n")
-    --   (ruleChanListen rule) ++
+    -- render channel consumes
+    concatMap
+      (\cout     -> "      " ++ stateChanReadyVarCName cfg (chanName cout)
+                             ++ " = false;\n"
+                 ++ "      " ++ stateChanVarCName cfg (chanName cout)
+                             ++ " = " ++ initForType (chanType cout) ++ "\n")
+      (ruleChanRead rule) ++
 
     -- END rule function
     "}\n\n"
