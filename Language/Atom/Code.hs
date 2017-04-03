@@ -541,7 +541,7 @@ codeRule mp cfg rule@(Rule{}) =
       (\cout     -> "      " ++ stateChanReadyVarCName cfg (chanName cout)
                              ++ " = false;\n"
                  ++ "      " ++ stateChanVarCName cfg (chanName cout)
-                             ++ " = " ++ initForType (chanType cout) ++ "\n")
+                             ++ " = " ++ initForType (chanType cout) ++ ";\n")
       (ruleChanRead rule) ++
 
     -- END rule function
