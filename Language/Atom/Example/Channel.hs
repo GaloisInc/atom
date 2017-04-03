@@ -1,4 +1,4 @@
--- | 
+-- |
 -- Module: Channel
 -- Description: Example design which shows off channels
 -- Copyright: (c) 2016 Benjamin Jones
@@ -58,16 +58,11 @@ example = do
   -- A rule to send value of 'a'
   atom "node_A" $ do
     cond $ value a >. Const 0
-    -- writeChannel :: ChanInput a -> E a -> Atom ()
-    -- or... ? 
-    -- writeChannel :: ChanInput a -> E a -> Atom Bool  -- success or failure
-    --                                                  -- of write
     writeChannel cin (value a)
 
   -- A rule to receive a value from the channel
   atom "node_B" $ do
     cond $ channelReady cout
-    -- readChannel :: ChanOutput a -> Atom (E a)
     b' <- readChannel cout
     b <== b'
 
