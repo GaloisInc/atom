@@ -68,6 +68,7 @@ library
         Language.Atom.Example.External
         Language.Atom.Example.Gcd
         Language.Atom.Example.Probes
+        Language.Atom.Example.Periodic
         Language.Atom.Expressions
         Language.Atom.Inspect
         Language.Atom.Language
