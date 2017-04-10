@@ -1,10 +1,11 @@
 -- |
--- Module: Channel
--- Description: Example design which shows off channels
--- Copyright: (c) 2016 Benjamin Jones
+-- Module: ChannelCond
+-- Description: Example design which shows off the two different channel
+--              'cond' primitives
+-- Copyright: (c) 2017 Benjamin Jones
 --
 
-module Language.Atom.Example.Channel
+module Language.Atom.Example.ChannelCond
   ( compileExample
   , example
   ) where
@@ -39,7 +40,7 @@ prePostCode _ _ _ =
     ]
   )
 
--- | An example design that computes the greatest common divisor.
+-- | An example design
 example :: Atom ()
 example = do
 
@@ -52,22 +53,31 @@ example = do
   -- The external running flag.
   let running = bool' "running"
 
+  subCounter <- int64 "subCounter" 0
+  probe "subCounter" (value subCounter)
+
   -- Setup channel from node A to node B
   (cin, cout) <- channel "A_to_B" Word32
 
   -- A rule to send value of 'a'
   atom "node_A" $ do
-    cond $ value a >. Const 0
+    cond $ value running
     writeChannel cin (value a)
 
   -- A rule to receive a value from the channel
   atom "node_B" $ do
-    cond $ fullChannel cout
+    cond' $ fullChannel cout
     b' <- readChannel cout
     b <== b'
+
+    -- Sub-atom of node B
+    atom "sub-node-B" $ do
+      cond $ value running
+      incr subCounter
 
   -- A rule to clear the running flag.
   atom "stop" $ do
     cond $ value a ==. value b
     running <== false
 
+  mapM_ printProbe =<< probes

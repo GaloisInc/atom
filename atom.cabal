@@ -65,6 +65,8 @@ library
         Language.Atom.Common.ValidData
         Language.Atom.Compile
         Language.Atom.Elaboration
+        Language.Atom.Example.Channel
+        Language.Atom.Example.ChannelCond
         Language.Atom.Example.External
         Language.Atom.Example.Gcd
         Language.Atom.Example.Probes
