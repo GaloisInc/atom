@@ -75,6 +75,8 @@ data AtomDB = AtomDB
   , atomNames       :: [Name]
     -- | Enabling condition.
   , atomEnable      :: Hash
+    -- | Non-hereditary component on enable cond
+  , atomEnableNH    :: Hash
     -- | Sub atoms.
   , atomSubs        :: [AtomDB]
   , atomPeriod      :: Int
@@ -95,6 +97,7 @@ data Rule
     { ruleId          :: Int
     , ruleName        :: Name
     , ruleEnable      :: Hash
+    , ruleEnableNH    :: Hash
     , ruleAssigns     :: [(MUV, Hash)]
     , ruleActions     :: [([String] -> String, [Hash])]
     , rulePeriod      :: Int
@@ -159,10 +162,19 @@ elaborateRules parentEnable atom =
       S.put st'
       return h
 
+    -- *don't* combine the parent enableNH and the child enableNH conditions
+    enableNH :: UeState Hash
+    enableNH = do
+      st <- S.get
+      let (h,st') = newUE (recoverUE st (atomEnable atom)) st
+      S.put st'
+      return h
+
     -- creat a 'Rule' from the 'AtomDB' and enable condition
     rule :: UeState Rule
     rule = do
       h <- enable
+      h' <- enableNH
       assigns <- S.foldM (\prs pr -> do pr' <- enableAssign pr
                                         return $ pr' : prs) []
                          (atomAssigns atom)
@@ -170,6 +182,7 @@ elaborateRules parentEnable atom =
         { ruleId         = atomId   atom
         , ruleName       = atomName atom
         , ruleEnable     = h
+        , ruleEnableNH   = h'
         , ruleAssigns    = assigns
         , ruleActions    = atomActions atom
         , rulePeriod     = atomPeriod  atom
@@ -286,12 +299,14 @@ getChannels rs = Map.unionsWith mergeInfo (map getChannels' rs)
 buildAtom :: UeMap -> Global -> Name -> Atom a -> IO (a, AtomSt)
 buildAtom st g name (Atom f) = do
   let (h,st') = newUE (ubool True) st
-  f (st', ( g { gRuleId = gRuleId g + 1 }
+  let (h',st'') = newUE (ubool True) st'
+  f (st'', ( g { gRuleId = gRuleId g + 1 }
           , AtomDB
               { atomId        = gRuleId g
               , atomName      = name
               , atomNames     = []
               , atomEnable    = h
+              , atomEnableNH  = h'
               , atomSubs      = []
               , atomPeriod    = gPeriod g
               , atomPhase     = gPhase  g

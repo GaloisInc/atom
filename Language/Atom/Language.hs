@@ -21,6 +21,7 @@ module Language.Atom.Language
   , getPhase
   -- * Action Directives
   , cond
+  , cond'
   , Assign (..)
   , incr
   , decr
@@ -327,8 +328,16 @@ cond :: E Bool -> Atom ()
 cond c = do
   (st, (g, atom')) <- get
   let ae = recoverUE st (atomEnable atom')
-  let (h,st') = newUE (uand ae (ue c)) st
-  put (st', (g, atom' { atomEnable = h}))
+  let (h, st') = newUE (uand ae (ue c)) st
+  put (st', (g, atom' { atomEnable = h }))
+
+-- | Similar to 'cond', but does not inherit the enable condition from its
+-- parent.
+cond' :: E Bool -> Atom ()
+cond' c = do
+  (st, (g, atom')) <- get
+  let (h, st') = newUE (ue c) st  -- no inheritance
+  put (st', (g, atom' { atomEnableNH = h }))
 
 -- | Reference to the 64-bit free running clock.
 clock :: E Word64
@@ -339,7 +348,6 @@ nextCoverage :: Atom (E Word32, E Word32)
 nextCoverage = do
   action (const "__coverage_index = (__coverage_index + 1) % __coverage_len") []
   return (value $ word32' "__coverage_index", value $ word32' "__coverage[__coverage_index]")
-
 
 -- | An assertions checks that an 'E Bool' is true.  Assertions are checked
 -- between the execution of every rule.  Parent enabling conditions can
