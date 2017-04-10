@@ -126,7 +126,7 @@ phase' :: (Int -> Phase) -> Int -> Atom a -> Atom a
 phase' _ n _ | n < 0 = error $ "ERROR: phase " ++ show n ++ " must be at least 0."
 phase' phType n atom' = do
   (st, (g, a)) <- get
-  if (n >= gPeriod g) 
+  if n >= gPeriod g
     then error $ "ERROR: phase " ++ show n ++ " must be less than the current period "
                ++ show (gPeriod g) ++ "."
     else do put (st, (g { gPhase = phType n }, a))
@@ -140,11 +140,11 @@ phase' phType n atom' = do
 -- period (thus, the 'phase' must be at least zero and less than the current
 -- 'period').
 phase :: Int -> Atom a -> Atom a
-phase n a = phase' MinPhase n a
+phase = phase' MinPhase
 
 -- | Ensures an atom is scheduled only at phase @n@.
 exactPhase :: Int -> Atom a -> Atom a
-exactPhase n a = phase' ExactPhase n a
+exactPhase = phase' ExactPhase
 
 -- | Returns the phase of the current scope.
 getPhase :: Atom Int
@@ -356,8 +356,9 @@ nextCoverage = do
 assert :: Name -> E Bool -> Atom ()
 assert name check = do
   (st, (g, atom')) <- get
-  let names = fst $ unzip $ atomAsserts atom'
-  when (elem name names) (liftIO $ putStrLn $ "WARNING: Assertion name already used: " ++ name)
+  let names = map fst (atomAsserts atom')
+  when (name `elem` names)
+       (liftIO $ putStrLn $ "WARNING: Assertion name already used: " ++ name)
   let (chk,st') = newUE (ue check) st
   put (st', (g, atom' { atomAsserts = (name, chk) : atomAsserts atom' }))
 
@@ -374,8 +375,8 @@ assertImply name a b = do
 cover :: Name -> E Bool -> Atom ()
 cover name check = do
   (st, (g, atom')) <- get
-  let names = fst $ unzip $ atomCovers atom'
-  when (elem name names)
+  let names = map fst (atomCovers atom')
+  when (name `elem` names)
        (liftIO . putStrLn $ "WARNING: Coverage name already used: " ++ name)
   let (chk,st') = newUE (ue check) st
   put (st', (g, atom' { atomCovers = (name, chk) : atomCovers atom' }))
