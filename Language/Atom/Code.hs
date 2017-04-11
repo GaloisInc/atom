@@ -201,7 +201,7 @@ codeUE mp config ues d (ue', n) =
       a = head operands
       b = operands !! 1
       c = operands !! 2
-      f = case ( typeOf ue' mp) of
+      f = case typeOf ue' mp of
             Float     -> "f"
             Double    -> ""
             _         -> error "unhandled float type"
@@ -251,7 +251,7 @@ writeC name config state rules (mp, schedule') assertNames coverNames probeNames
                    ++ " __coverage_len = " ++ show covLen ++ ";"
       , codeIf (cRuleCoverage config) $ "static " ++ cType Word32
                    ++ " __coverage[" ++ show covLen ++ "] = {"
-                   ++ (concat $ intersperse ", " $ replicate covLen "0") ++ "};"
+                   ++ intercalate ", " (replicate covLen "0") ++ "};"
       , codeIf (cRuleCoverage config)
                ("static " ++ cType Word32 ++ " __coverage_index = 0;")
 
@@ -491,7 +491,7 @@ declState define a' = if isHierarchyEmpty a' then ""
 -- TODO there is a bug here where some code actions get rendered in some
 --      contexts but not in others. (see atom-smp recv1 code vs. recv2 code)
 codeRule :: UeMap -> Config -> Rule -> String
-codeRule mp cfg rule@(Rule{}) =
+codeRule mp cfg rule@Rule{} =
     -- function decl
     "/* " ++ show rule ++ " */\n" ++
     "static void __r" ++ show (ruleId rule) ++ "() {\n" ++
@@ -499,35 +499,36 @@ codeRule mp cfg rule@(Rule{}) =
     -- declare local vars
     concatMap (codeUE mp cfg ues "  ") ues ++
 
-    -- TODO remove if successful
-    -- check the channel listen enable
-    --maybe
-    --  ""
-    --  (\cname -> "  if (" ++ stateChanReadyVarCName cfg cname ++ ") {\n")
-    --  (ruleChanListen rule) ++
-
-    -- check enable condition
-    -- TODO indent appropriately depending on channel listen block
-    "    if (" ++ id' (ruleEnable rule) ++ ") {\n" ++
+    -- check inherited and non-inherited enable conditions
+    "  if (" ++ id' (ruleEnable rule) ++
+                codeEnableNH ++ ") {\n" ++
 
     -- render all the rule actions
     concatMap codeAction (ruleActions rule) ++
 
     -- render the rule coverage
     codeIf (cRuleCoverage cfg)
-           ( "      __coverage[" ++ covWord ++ "] = __coverage[" ++ covWord
+           ( "    __coverage[" ++ covWord ++ "] = __coverage[" ++ covWord
             ++ "] | (1 << " ++ covBit ++ ");\n") ++
 
-    -- render channel write
+    -- render channel writes
     concatMap
-      (\(cin, h) -> "      " ++ stateChanVarCName cfg (chanName cin)
+      (\(cin, h) -> "    " ++ stateChanVarCName cfg (chanName cin)
                              ++ " = " ++ id' h ++ ";\n"
-                 ++ "      " ++ stateChanReadyVarCName cfg (chanName cin)
+                 ++ "    " ++ stateChanReadyVarCName cfg (chanName cin)
                              ++ " = true;\n")
       (ruleChanWrite rule) ++
 
+    -- render channel consumes
+    concatMap
+      (\cout     -> "    " ++ stateChanReadyVarCName cfg (chanName cout)
+                           ++ " = false;\n"
+                 ++ "    " ++ stateChanVarCName cfg (chanName cout)
+                           ++ " = " ++ initForType (chanType cout) ++ ";\n")
+      (ruleChanRead rule) ++
+
     -- END enable condition
-    "    }\n" ++
+    "  }\n" ++
 
     -- Render atom assignments
     --
@@ -536,14 +537,6 @@ codeRule mp cfg rule@(Rule{}) =
     -- on the enable flag.
     concatMap codeAssign (ruleAssigns rule) ++
 
-    -- render channel consumes
-    concatMap
-      (\cout     -> "      " ++ stateChanReadyVarCName cfg (chanName cout)
-                             ++ " = false;\n"
-                 ++ "      " ++ stateChanVarCName cfg (chanName cout)
-                             ++ " = " ++ initForType (chanType cout) ++ ";\n")
-      (ruleChanRead rule) ++
-
     -- END rule function
     "}\n\n"
   where
@@ -551,7 +544,7 @@ codeRule mp cfg rule@(Rule{}) =
     lkErr u = "in codeRule: failed to lookup untyped expr " ++ show u
     id' ue' = fromMaybe (error $ lkErr ue') $ lookup ue' ues
 
-    codeAction :: (([String] -> String), [Hash]) -> String
+    codeAction :: ([String] -> String, [Hash]) -> String
     codeAction (f, args) = "      " ++ f (map id' args) ++ ";\n"
 
     covWord = show $ div (ruleId rule) 32
@@ -572,6 +565,11 @@ codeRule mp cfg rule@(Rule{}) =
           error "MUVChannel can't appear in lhs of assign"
         MUVChannelReady{}           ->
           error "MUVChannelReady can't appear in lhs of assign"
+
+    -- skip rendering the conjunction with 'ruleEnableNH' if it is the same as
+    -- ruleEnable (a very common case)
+    codeEnableNH = let renh = id' (ruleEnableNH rule)
+                   in codeIf (id' (ruleEnable rule) /= renh) (" && " ++ renh)
 
 -- Don't generate code for the 'Assert' or 'Cover' variants
 codeRule _ _ _ = ""

@@ -71,7 +71,7 @@ example = do
     b <== b'
 
     -- Sub-atom of node B
-    atom "sub-node-B" $ do
+    atom "sub_node_B" $ do
       cond $ value running
       incr subCounter
 

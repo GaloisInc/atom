@@ -32,7 +32,7 @@ import Control.Monad (ap)
 import Control.Monad.Trans
 import Data.Function (on)
 import Data.Char (isAlpha, isAlphaNum)
-import Data.List (nub, sort)
+import Data.List (intercalate, nub, sort)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Maybe (isJust, isNothing)
@@ -91,6 +91,15 @@ data AtomDB = AtomDB
   , atomChanRead    :: [ChanOutput]
   }
 
+instance Show AtomDB where
+  show a = "AtomDB { " ++ intercalate ", " [ show (atomId a)
+                                           , atomName a
+                                           -- , show (atomEnable a)
+                                           -- , show (atomEnableNH a)
+                                           ] ++ " }"  -- TODO more detail?
+instance Eq   AtomDB where (==) = (==) `on` atomId
+instance Ord  AtomDB where compare a b = compare (atomId a) (atomId b)
+
 -- XXX sum of records leads to partial record field functions
 data Rule
   = Rule
@@ -116,6 +125,15 @@ data Rule
     , ruleCover     :: Hash
     }
 
+instance Show Rule where
+  show r@Rule{} = "Rule { " ++ intercalate ", " [ show (ruleId r)
+                                                , ruleName r
+                                                -- , show (ruleEnable r)
+                                                -- , show (ruleEnableNH r)
+                                                ] ++ " }"  -- TODO more detail?
+  show _r@Assert{} = "Assert{}"
+  show _r@Cover{} = "Cover{}"
+
 -- | Compiled channel info used to return channel info from the elaboration
 -- functions.
 data ChanInfo = ChanInfo
@@ -135,22 +153,18 @@ data StateHierarchy
   | StateChannel   Name Type
   deriving (Show)
 
-instance Show AtomDB where show = atomName
-instance Eq   AtomDB where (==) = (==) `on` atomId
-instance Ord  AtomDB where compare a b = compare (atomId a) (atomId b)
-instance Show Rule   where show = ruleName
 
 elaborateRules:: Hash -> AtomDB -> UeState [Rule]
 elaborateRules parentEnable atom =
-    if isRule then do r  <- rule
-                      rs <- rules
-                      return $ r : rs
-               else rules
+      if isRule then do r  <- rule
+                        rs <- rules
+                        return (r : rs)
+                 else rules
   where
     -- are there either assignments, actions, or writeChannels to be done?
-    isRule = not $  null (atomAssigns atom)
-                      && null (atomActions atom)
-                      && null (atomChanWrite atom)
+    isRule = not $ null (atomAssigns atom)
+                     && null (atomActions atom)
+                     && null (atomChanWrite atom)
 
     -- combine the parent enable and the child enable conditions
     enable :: UeState Hash
@@ -166,11 +180,11 @@ elaborateRules parentEnable atom =
     enableNH :: UeState Hash
     enableNH = do
       st <- S.get
-      let (h,st') = newUE (recoverUE st (atomEnable atom)) st
+      let (h,st') = newUE (recoverUE st (atomEnableNH atom)) st
       S.put st'
       return h
 
-    -- creat a 'Rule' from the 'AtomDB' and enable condition
+    -- creat a 'Rule' from the 'AtomDB' and enable condition(s)
     rule :: UeState Rule
     rule = do
       h <- enable
@@ -178,7 +192,7 @@ elaborateRules parentEnable atom =
       assigns <- S.foldM (\prs pr -> do pr' <- enableAssign pr
                                         return $ pr' : prs) []
                          (atomAssigns atom)
-      return $ Rule
+      return Rule
         { ruleId         = atomId   atom
         , ruleName       = atomName atom
         , ruleEnable     = h
@@ -187,7 +201,6 @@ elaborateRules parentEnable atom =
         , ruleActions    = atomActions atom
         , rulePeriod     = atomPeriod  atom
         , rulePhase      = atomPhase   atom
-        -- , ruleChanListen = atomChanListen atom
         , ruleChanWrite  = atomChanWrite atom
         , ruleChanRead = atomChanRead atom
         }
@@ -195,7 +208,7 @@ elaborateRules parentEnable atom =
     assert :: (Name, Hash) -> UeState Rule
     assert (name, u) = do
       h <- enable
-      return $ Assert
+      return Assert
         { ruleName      = name
         , ruleEnable    = h
         , ruleAssert    = u
@@ -204,7 +217,7 @@ elaborateRules parentEnable atom =
     cover :: (Name, Hash) -> UeState Rule
     cover (name, u) = do
       h <- enable
-      return $ Cover
+      return Cover
         { ruleName      = name
         , ruleEnable    = h
         , ruleCover     = u
@@ -215,14 +228,14 @@ elaborateRules parentEnable atom =
     rules :: UeState [Rule]
     rules = do
       asserts <- S.foldM (\rs e -> do r <- assert e
-                                      return $ r:rs
+                                      return (r:rs)
                          ) [] (atomAsserts atom)
       covers  <- S.foldM (\rs e -> do r <- cover e
-                                      return $ r:rs
+                                      return (r:rs)
                          ) [] (atomCovers atom)
       rules'  <- S.foldM (\rs db -> do en <- enable
                                        r <- elaborateRules en db
-                                       return $ r:rs
+                                       return (r:rs)
                          ) [] (atomSubs atom)
       return $ asserts ++ covers ++ concat rules'
 
@@ -232,11 +245,16 @@ elaborateRules parentEnable atom =
     enableAssign :: (MUV, Hash) -> UeState (MUV, Hash)
     enableAssign (uv', ue') = do
       e <- enable
-      h <- maybeUpdate (MUVRef uv')
+      enh <- enableNH
       st <- S.get
-      let muxe     = umux (recoverUE st e) (recoverUE st ue') (recoverUE st h)
-          (h',st') = newUE muxe st
-      S.put st'
+      -- conjoin the regular enable condition and the non-inherited one,
+      -- creating a new UE in the process
+      let andes = uand (recoverUE st e) (recoverUE st enh)
+          (e', st') = newUE andes st
+      h <- maybeUpdate (MUVRef uv')
+      let muxe     = umux (recoverUE st' e') (recoverUE st' ue') (recoverUE st' h)
+          (h',st'') = newUE muxe st'
+      S.put st''
       return (uv', h')
 
 reIdRules :: Int -> [Rule] -> [Rule]
@@ -249,7 +267,7 @@ reIdRules i (a:b) = case a of
 getChannels :: [Rule] -> Map Int ChanInfo
 getChannels rs = Map.unionsWith mergeInfo (map getChannels' rs)
   where getChannels' :: Rule -> Map Int ChanInfo
-        getChannels' r@(Rule{}) =
+        getChannels' r@Rule{} =
           -- TODO: fwrite and fread could be refactored in more concise way
           let fwrite :: (ChanInput, Hash) -> (Int, ChanInfo)
               fwrite (c, h) = ( chanID c
@@ -409,33 +427,34 @@ trimState a =
 -- | Check if state hierarchy is empty
 isHierarchyEmpty :: StateHierarchy -> Bool
 isHierarchyEmpty h = case h of
-  StateHierarchy _ i   -> if null i then True
-                                    else and $ map isHierarchyEmpty i
-  StateVariable  _ _ -> False
-  StateArray     _ _ -> False
-  StateChannel   _ _ -> False
+  StateHierarchy _ []  -> True
+  StateHierarchy _ i   -> all isHierarchyEmpty i
+  StateVariable  _ _   -> False
+  StateArray     _ _   -> False
+  StateChannel   _ _   -> False
 
 -- | Checks that a rule will not be trivially disabled.
 checkEnable :: UeMap -> Rule -> IO ()
 checkEnable st rule
-  | ruleEnable rule == (fst $ newUE (ubool False) st) =
-      putStrLn $ "WARNING: Rule will never execute: " ++ show rule
-  | otherwise                      = return ()
+  | let f = (fst $ newUE (ubool False) st) in
+    ruleEnable rule == f || ruleEnableNH rule == f
+    = putStrLn $ "WARNING: Rule will never execute: " ++ show rule
+  | otherwise = return ()
 
 -- | Check that a variable is assigned more than once in a rule.  Will
 -- eventually be replaced consistent assignment checking.
 checkAssignConflicts :: Rule -> IO Bool
-checkAssignConflicts rule@(Rule{}) =
+checkAssignConflicts rule@Rule{} =
   if length vars /= length vars'
     then do
       putStrLn $ "ERROR: Rule "
                    ++ show rule
                    ++ " contains multiple assignments to the same variable(s)."
       return False
-    else do
+    else
       return True
   where
-  vars = fst $ unzip $ ruleAssigns rule
+  vars = map fst (ruleAssigns rule)
   vars' = nub vars
 checkAssignConflicts _ = return True
 
@@ -486,7 +505,7 @@ addName :: Name -> Atom Name
 addName name = do
   (st, (g, atom)) <- get
   checkName name
-  if elem name (atomNames atom)
+  if name `elem` atomNames atom
     then error $ unwords [ "ERROR: Name \"" ++ name ++ "\" not unique in"
                          , show atom ++ "." ]
     else do
@@ -497,7 +516,7 @@ addName name = do
 checkName :: Name -> Atom ()
 checkName name =
   if (\ x -> isAlpha x || x == '_') (head name) &&
-      and (map (\ x -> isAlphaNum x || x `elem` "._[]") (tail name))
+      all (\ x -> isAlphaNum x || x `elem` "._[]") (tail name)
     then return ()
     else error $ "ERROR: Name \"" ++ name ++ "\" is not a valid identifier."
 
@@ -505,7 +524,7 @@ checkName name =
 allUVs :: UeMap -> [Rule] -> Hash -> [MUV]
 allUVs st rules ue' = fixedpoint next $ nearestUVs ue' st
   where
-  assigns = concat [ ruleAssigns r | r@(Rule{}) <- rules ]
+  assigns = concat [ ruleAssigns r | r@Rule{} <- rules ]
   previousUVs :: MUV -> [MUV]
   previousUVs u = concat [ nearestUVs ue_ st | (uv', ue_) <- assigns, u == uv' ]
   next :: [MUV] -> [MUV]
@@ -519,7 +538,7 @@ fixedpoint f a | a == f a  = a
 
 -- | All primary expressions used in a rule.
 allUEs :: Rule -> [Hash]
-allUEs rule = ruleEnable rule : ues
+allUEs rule = ruleEnable rule : ruleEnableNH rule : ues
   where
   index :: MUV -> [Hash]
   index (MUVArray _ ue') = [ue']
@@ -527,7 +546,7 @@ allUEs rule = ruleEnable rule : ues
   ues = case rule of
     Rule{} ->
          concat [ ue' : index uv' | (uv', ue') <- ruleAssigns rule ]
-      ++ concat (snd (unzip (ruleActions rule)))
+      ++ concatMap snd (ruleActions rule)
       ++ map snd (ruleChanWrite rule)
     Assert _ _ a       -> [a]
     Cover  _ _ a       -> [a]
