@@ -5,6 +5,7 @@
 --
 -- Sharing for 'UE's, based on IntMaps.  The idea is to share subexpressions
 -- of 'UE's.
+{-# LANGUAGE CPP #-}
 
 module Language.Atom.UeMap
   ( UeElem (..)
@@ -29,7 +30,9 @@ import Control.Monad.State.Strict
 import qualified Data.Bimap as M
 import Data.List (nub)
 import Data.Maybe (fromMaybe)
+#if __GLASGOW_HASKELL__ >= 800
 import GHC.Stack
+#endif
 
 import Language.Atom.Expressions hiding (typeOf)
 import qualified Language.Atom.Expressions as E
@@ -157,12 +160,18 @@ type UeState a = State UeMap a
 
 -- | Get the element associated with a 'Hash' value.  It's a runtime error if
 -- the element is not in the map.
+#if __GLASGOW_HASKELL__ >= 800
 getUE :: HasCallStack => Hash -> UeMap -> UeElem
+#else
+getUE :: Hash -> UeMap -> UeElem
+#endif
 getUE h (_, mp) =
   flip fromMaybe (M.lookup h mp) $
     error $ "Error looking up hash " ++ show h
          ++ " in the UE map\n" ++ show mp
+#if __GLASGOW_HASKELL__ >= 800
          ++ "\n" ++ prettyCallStack callStack
+#endif
 
 -- | Put a new 'UE' in the map, unless it's already in there, and return the
 -- hash pointing to the 'UE' and a new map.
@@ -261,7 +270,7 @@ maybeUpdate e = do
     Just h -> return h
 
 -- | Get a 'UE' back out of the 'UeMap'.
-recoverUE :: HasCallStack => UeMap -> Hash -> UE
+recoverUE :: UeMap -> Hash -> UE
 recoverUE st h = case getUE h st of
   MUVRef     (MUV i j k)        -> UVRef (UV i j k)
   MUVRef     (MUVArray i a)     -> UVRef (UVArray i (recover' a))

@@ -39,8 +39,6 @@ import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Maybe (isJust, isNothing)
 
-import GHC.Stack
-
 import Language.Atom.Types
 import Language.Atom.Channel.Types
 import Language.Atom.Expressions hiding (typeOf)
@@ -157,7 +155,7 @@ data StateHierarchy
   deriving (Show)
 
 
-elaborateRules :: HasCallStack => Hash -> AtomDB -> UeState [Rule]
+elaborateRules :: Hash -> AtomDB -> UeState [Rule]
 elaborateRules parentEnable atom =
       if isRule then do r  <- rule
                         rs <- rules
