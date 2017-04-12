@@ -29,14 +29,17 @@ module Language.Atom.Elaboration
   ) where
 
 import Control.Monad (ap)
+import qualified Control.Monad.State.Strict as S
 import Control.Monad.Trans
+
 import Data.Function (on)
 import Data.Char (isAlpha, isAlphaNum)
 import Data.List (intercalate, nub, sort)
 import qualified Data.Map.Strict as Map
 import Data.Map.Strict (Map)
 import Data.Maybe (isJust, isNothing)
-import qualified Control.Monad.State.Strict as S
+
+import GHC.Stack
 
 import Language.Atom.Types
 import Language.Atom.Channel.Types
@@ -154,7 +157,7 @@ data StateHierarchy
   deriving (Show)
 
 
-elaborateRules:: Hash -> AtomDB -> UeState [Rule]
+elaborateRules :: HasCallStack => Hash -> AtomDB -> UeState [Rule]
 elaborateRules parentEnable atom =
       if isRule then do r  <- rule
                         rs <- rules

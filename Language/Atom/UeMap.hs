@@ -28,6 +28,8 @@ module Language.Atom.UeMap
 import Control.Monad.State.Strict
 import qualified Data.Bimap as M
 import Data.List (nub)
+import Data.Maybe (fromMaybe)
+import GHC.Stack
 
 import Language.Atom.Expressions hiding (typeOf)
 import qualified Language.Atom.Expressions as E
@@ -155,7 +157,7 @@ type UeState a = State UeMap a
 
 -- | Get the element associated with a 'Hash' value.  It's a runtime error if
 -- the element is not in the map.
-getUE :: Hash -> UeMap -> UeElem
+getUE :: HasCallStack => Hash -> UeMap -> UeElem
 getUE h (_, mp) =
   case M.lookup h mp of
     Nothing -> error $ "Error looking up hash " ++ show h
@@ -259,7 +261,7 @@ maybeUpdate e = do
     Just h -> return h
 
 -- | Get a 'UE' back out of the 'UeMap'.
-recoverUE :: UeMap -> Hash -> UE
+recoverUE :: HasCallStack => UeMap -> Hash -> UE
 recoverUE st h = case getUE h st of
   MUVRef     (MUV i j k)        -> UVRef (UV i j k)
   MUVRef     (MUVArray i a)     -> UVRef (UVArray i (recover' a))
