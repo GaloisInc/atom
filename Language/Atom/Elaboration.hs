@@ -244,15 +244,16 @@ elaborateRules parentEnable atom =
     -- where @__0@ is the 'enable' condition.
     enableAssign :: (MUV, Hash) -> UeState (MUV, Hash)
     enableAssign (uv', ue') = do
-      e <- enable
+      e   <- enable
       enh <- enableNH
-      st <- S.get
+      h   <- maybeUpdate (MUVRef uv')  -- insert variable into the UE map
+      st  <- S.get
       -- conjoin the regular enable condition and the non-inherited one,
       -- creating a new UE in the process
       let andes = uand (recoverUE st e) (recoverUE st enh)
           (e', st') = newUE andes st
-      h <- maybeUpdate (MUVRef uv')
-      let muxe     = umux (recoverUE st' e') (recoverUE st' ue') (recoverUE st' h)
+      S.put st'
+      let muxe      = umux (recoverUE st' e') (recoverUE st' ue') (recoverUE st' h)
           (h',st'') = newUE muxe st'
       S.put st''
       return (uv', h')
