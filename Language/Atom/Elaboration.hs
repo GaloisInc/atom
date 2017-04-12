@@ -182,10 +182,7 @@ elaborateRules parentEnable atom =
     -- *don't* combine the parent enableNH and the child enableNH conditions
     enableNH :: UeState Hash
     enableNH = do
-      st <- S.get
-      let (h,st') = newUE (recoverUE st (atomEnableNH atom)) st
-      S.put st'
-      return h
+      return (atomEnableNH atom)
 
     -- creat a 'Rule' from the 'AtomDB' and enable condition(s)
     rule :: UeState Rule

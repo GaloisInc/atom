@@ -159,15 +159,15 @@ type UeState a = State UeMap a
 -- the element is not in the map.
 getUE :: HasCallStack => Hash -> UeMap -> UeElem
 getUE h (_, mp) =
-  case M.lookup h mp of
-    Nothing -> error $ "Error looking up hash " ++ show h
-                    ++ " in the UE map\n" ++ show mp
-    Just e -> e
+  flip fromMaybe (M.lookup h mp) $
+    error $ "Error looking up hash " ++ show h
+         ++ " in the UE map\n" ++ show mp
+         ++ "\n" ++ prettyCallStack callStack
 
 -- | Put a new 'UE' in the map, unless it's already in there, and return the
 -- hash pointing to the 'UE' and a new map.
 newUE :: UE -> UeMap -> (Hash, UeMap)
-newUE ue_ mp = runState (share ue_) mp
+newUE ue_ = runState (share ue_)
 
 emptyMap :: UeMap
 emptyMap = (0, M.empty)
@@ -177,7 +177,7 @@ share :: UE -> UeState Hash
 share e = case e of
   UVRef     (UV i j k)        -> maybeUpdate (MUVRef $ MUV i j k)
   UVRef     (UVExtern i j)    -> maybeUpdate (MUVRef $ MUVExtern i j)
-  UVRef     (UVArray arr a)   -> unOp a (\x -> MUVRef (MUVArray arr x))
+  UVRef     (UVArray arr a)   -> unOp a (MUVRef . MUVArray arr)
   UVRef     (UVChannel i j k) -> maybeUpdate (MUVRef $ MUVChannel i j k)
   UVRef     (UVChannelReady i j) -> maybeUpdate (MUVRef $ MUVChannelReady i j)
   UConst    a     -> maybeUpdate (MUConst a)
@@ -307,16 +307,16 @@ recoverUE st h = case getUE h st of
   MUAcosh    a     -> UAcosh    (recover' a)
   MUAtan     a     -> UAtan     (recover' a)
   MUAtanh    a     -> UAtanh    (recover' a)
-  where recover' h' = recoverUE st h'
+  where recover' = recoverUE st
 
 -- | The list of Hashes to adjacent upstream of a UE.
 ueUpstream :: Hash -> UeMap -> [Hash]
 ueUpstream h t = case getUE h t of
-  MUVRef     (MUV _ _ _)     -> []
+  MUVRef     MUV{}           -> []
   MUVRef     (MUVArray _ a)  -> [a]
-  MUVRef     (MUVExtern _ _) -> []
-  MUVRef     (MUVChannel{})  -> []
-  MUVRef     (MUVChannelReady{}) -> []
+  MUVRef     MUVExtern{}     -> []
+  MUVRef     MUVChannel{}    -> []
+  MUVRef     MUVChannelReady{} -> []
   MUCast     _ a             -> [a]
   MUConst    _               -> []
   MUAdd      a b             -> [a, b]
