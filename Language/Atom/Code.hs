@@ -511,13 +511,9 @@ codeRule mp cfg rule@Rule{} =
            ( "    __coverage[" ++ covWord ++ "] = __coverage[" ++ covWord
             ++ "] | (1 << " ++ covBit ++ ");\n") ++
 
-    -- render channel writes
-    concatMap
-      (\(cin, h) -> "    " ++ stateChanVarCName cfg (chanName cin)
-                             ++ " = " ++ id' h ++ ";\n"
-                 ++ "    " ++ stateChanReadyVarCName cfg (chanName cin)
-                             ++ " = true;\n")
-      (ruleChanWrite rule) ++
+    -- render channel writes. Note: channel delay is ignored intentionally,
+    -- as it is only supported in the transition system backend.
+    concatMap handleChanWrite (ruleChanWrite rule) ++
 
     -- render channel consumes
     concatMap
@@ -570,6 +566,14 @@ codeRule mp cfg rule@Rule{} =
     -- ruleEnable (a very common case)
     codeEnableNH = let renh = id' (ruleEnableNH rule)
                    in codeIf (id' (ruleEnable rule) /= renh) (" && " ++ renh)
+
+    handleChanWrite (cin, h, DelayDefault) =
+      let cn = chanName cin
+      in    "    " ++ stateChanVarCName cfg cn ++ " = " ++ id' h ++ ";\n"
+         ++ "    " ++ stateChanReadyVarCName cfg cn ++ " = true;\n"
+    handleChanWrite (_, _, DelayTicks _) =
+      error ("writeChannelWithDelay with non-default delay is not supported\n"
+            ++ "in the C code generator.\n")
 
 -- Don't generate code for the 'Assert' or 'Cover' variants
 codeRule _ _ _ = ""

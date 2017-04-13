@@ -15,8 +15,8 @@ Atom eliminates the need and overhead of RTOSes for many embedded applications.
 -}
 
 module Language.Atom
-  ( -- * Code 
-    -- | Module: "Language.Atom.Code" 
+  ( -- * Code
+    -- | Module: "Language.Atom.Code"
     Config (..), defaults, Clock (..), defaultClock, writeC, cType, RuleCoverage,
     -- * Compilation
     -- | Module: "Language.Atom.Compile"
@@ -43,7 +43,8 @@ module Language.Atom
     action, call, probe, probes, assert, cover, assertImply, Name, liftIO,
     path, clock, nextCoverage,
     -- ** channels
-    channel, ChanInput (..), ChanOutput (..), writeChannel,
+    channel, ChanInput (..), ChanOutput (..),
+    writeChannelWithDelay, writeChannel,
     readChannel, fullChannel,
     -- * Expressions
     -- | Module: "Language.Atom.Expressions"

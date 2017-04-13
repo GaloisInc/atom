@@ -16,6 +16,7 @@ module Language.Atom.Channel
   ( -- * Channel Declarations
     channel
     -- * Channel operations
+  , writeChannelWithDelay
   , writeChannel
   , readChannel
   , fullChannel
@@ -58,12 +59,16 @@ channel name t = do
 -- (computation) phase of the Atom's execution.
 --
 -- The write operation overwrites the content of the given channel.
-writeChannel :: Expr a => ChanInput -> E a -> Atom ()
-writeChannel cin e = do
+writeChannelWithDelay :: Expr a => ChannelDelay -> ChanInput -> E a -> Atom ()
+writeChannelWithDelay d cin e = do
   (st, (g, atom)) <- get
   let (h, st0) = newUE (ue e) st
   put (st0, (g, atom { atomChanWrite = atomChanWrite atom
-                                    ++ [(cin, h)] }))
+                                    ++ [(cin, h, d)] }))
+
+-- | Default delay specialization of the above.
+writeChannel :: Expr a => ChanInput -> E a -> Atom ()
+writeChannel = writeChannelWithDelay DelayDefault
 
 -- | Read a message from a typed channel. This action returns an expression
 -- representing the value of the last message written (or the initial content).

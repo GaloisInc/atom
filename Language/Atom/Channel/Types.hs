@@ -1,10 +1,13 @@
 module Language.Atom.Channel.Types (
     ChanInput (..)
   , ChanOutput (..)
+  , ChannelDelay(..)
   , mkChanInput
   , mkChanOutput
   , HasChan(..)
 ) where
+
+import Data.Int (Int64)
 
 import Language.Atom.Types
 import Language.Atom.Expressions
@@ -31,6 +34,10 @@ data ChanOutput = ChanOutput
 
 mkChanOutput :: Int -> Name -> Type -> ChanOutput
 mkChanOutput = ChanOutput
+
+-- | Channel delay specification
+data ChannelDelay = DelayDefault
+                  | DelayTicks Int64
 
 
 -- Channel Operations --------------------------------------------------

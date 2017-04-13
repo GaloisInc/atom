@@ -88,7 +88,7 @@ data AtomDB = AtomDB
   , atomAsserts     :: [(Name, Hash)]
   , atomCovers      :: [(Name, Hash)]
     -- | a list of (channel input, channel value hash) pairs for writes
-  , atomChanWrite   :: [(ChanInput, Hash)]
+  , atomChanWrite   :: [(ChanInput, Hash, ChannelDelay)]
   , atomChanRead    :: [ChanOutput]
   }
 
@@ -112,7 +112,8 @@ data Rule
     , ruleActions     :: [([String] -> String, [Hash])]
     , rulePeriod      :: Int
     , rulePhase       :: Phase
-    , ruleChanWrite   :: [(ChanInput, Hash)]  -- ^ see corresonding field in Atom
+    , ruleChanWrite   :: [(ChanInput, Hash, ChannelDelay)]
+      -- ^ see corresonding field in AtomDB
     , ruleChanRead    :: [ChanOutput]
     }
   | Assert
@@ -268,17 +269,17 @@ getChannels rs = Map.unionsWith mergeInfo (map getChannels' rs)
   where getChannels' :: Rule -> Map Int ChanInfo
         getChannels' r@Rule{} =
           -- TODO: fwrite and fread could be refactored in more concise way
-          let fwrite :: (ChanInput, Hash) -> (Int, ChanInfo)
-              fwrite (c, h) = ( chanID c
-                              , ChanInfo
-                                  { cinfoSrc       = Just (ruleId r)
-                                  , cinfoRecv      = Nothing
-                                  , cinfoId        = chanID c
-                                  , cinfoName      = chanName c
-                                  , cinfoType      = chanType c
-                                  , cinfoValueExpr = Just h
-                                  }
-                              )
+          let fwrite :: (ChanInput, Hash, ChannelDelay) -> (Int, ChanInfo)
+              fwrite (c, h, _) = ( chanID c
+                                 , ChanInfo
+                                     { cinfoSrc       = Just (ruleId r)
+                                     , cinfoRecv      = Nothing
+                                     , cinfoId        = chanID c
+                                     , cinfoName      = chanName c
+                                     , cinfoType      = chanType c
+                                     , cinfoValueExpr = Just h
+                                     }
+                                 )
               fread :: ChanOutput -> (Int, ChanInfo)
               fread c = ( chanID c
                         , ChanInfo
@@ -546,7 +547,7 @@ allUEs rule = ruleEnable rule : ruleEnableNH rule : ues
     Rule{} ->
          concat [ ue' : index uv' | (uv', ue') <- ruleAssigns rule ]
       ++ concatMap snd (ruleActions rule)
-      ++ map snd (ruleChanWrite rule)
+      ++ map (\(_, h, _) -> h) (ruleChanWrite rule)
     Assert _ _ a       -> [a]
     Cover  _ _ a       -> [a]
 
